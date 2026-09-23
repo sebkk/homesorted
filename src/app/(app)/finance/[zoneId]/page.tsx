@@ -9,5 +9,5 @@ export default async function FinanceZonePage({ params }: { params: Promise<{ zo
 
   if (!zone) notFound();
 
-  return <FinanceView zoneId={zone.id} zoneName={zone.name} />;
+  return <FinanceView zoneId={zone.id} zoneName={zone.name} zoneCurrency={zone.currency ?? "PLN"} />;
 }

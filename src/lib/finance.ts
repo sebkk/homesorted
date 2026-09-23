@@ -1,10 +1,9 @@
 import {
   AnyExpense,
   AnyIncome,
+  CategoryRole,
   Expense,
   Income,
-  MONTHS,
-  MONTHS_GENITIVE,
   RecurringExpense,
   RecurringIncome,
   RecurringIncomeOccurrence,
@@ -12,6 +11,21 @@ import {
   RecurringTemplate,
   SavingsEntry,
 } from "./types";
+
+/** Gross amount for an income stored as net (+ its VAT rate), in the entry's own currency. */
+export function grossAmount(x: { amount: number; vat_rate: number }): number {
+  return Math.round(x.amount * (1 + (Number(x.vat_rate) || 0)) * 100) / 100;
+}
+
+/** An entry's value in its zone's currency: amount * NBP rate (1 for same currency). */
+export function baseAmount(x: { amount: number; fx_rate?: number }): number {
+  return x.amount * (Number(x.fx_rate) || 1);
+}
+
+/** Gross income converted into the zone's currency. */
+export function grossBase(x: { amount: number; vat_rate: number; fx_rate?: number }): number {
+  return grossAmount(x) * (Number(x.fx_rate) || 1);
+}
 
 export function pad2(n: number): string {
   return String(n).padStart(2, "0");
@@ -24,30 +38,46 @@ export function resolveIcon(entryIcon: string | null | undefined, defaultIcon: s
   return entryIcon || defaultIcon || DEFAULT_ICON;
 }
 
-export function fmt(n: number, dec = 0): string {
+export function fmt(n: number, dec = 2, currency = "PLN", locale = "pl-PL"): string {
   const v = Math.round((n + Number.EPSILON) * Math.pow(10, dec)) / Math.pow(10, dec);
-  return (
-    new Intl.NumberFormat("pl-PL", {
-      minimumFractionDigits: dec,
-      maximumFractionDigits: dec,
-    }).format(v) + " zł"
-  );
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency,
+    currencyDisplay: "narrowSymbol",
+    minimumFractionDigits: dec,
+    maximumFractionDigits: dec,
+  }).format(v);
 }
 
-export function monthLabel(key: string): string {
+function monthDate(key: string): Date {
   const [y, m] = key.split("-");
-  return `${MONTHS[parseInt(m, 10) - 1]} ${y}`;
+  return new Date(parseInt(y, 10), parseInt(m, 10) - 1, 1);
 }
 
-/** Genitive form for use after "od"/"do", e.g. "od sierpnia 2026". */
-export function monthLabelGenitive(key: string): string {
-  const [y, m] = key.split("-");
-  return `${MONTHS_GENITIVE[parseInt(m, 10) - 1]} ${y}`;
+function capitalize(s: string, locale: string): string {
+  return s.charAt(0).toLocaleUpperCase(locale) + s.slice(1);
 }
 
-export function monthShort(key: string): string {
-  const [, m] = key.split("-");
-  return MONTHS[parseInt(m, 10) - 1].slice(0, 3);
+/** "Wrzesień 2026" / "September 2026". `locale` is a BCP 47 tag (see INTL_LOCALE). */
+export function monthLabel(key: string, locale = "pl-PL"): string {
+  const d = monthDate(key);
+  const name = new Intl.DateTimeFormat(locale, { month: "long" }).format(d);
+  return `${capitalize(name, locale)} ${d.getFullYear()}`;
+}
+
+/** Month name in the form used inside a date — the genitive in Polish
+ * ("od września 2026"), identical to the plain name in English. */
+export function monthLabelGenitive(key: string, locale = "pl-PL"): string {
+  const d = monthDate(key);
+  const name = new Intl.DateTimeFormat(locale, { day: "numeric", month: "long" })
+    .formatToParts(d)
+    .find((p) => p.type === "month")!.value;
+  return `${name} ${d.getFullYear()}`;
+}
+
+export function monthShort(key: string, locale = "pl-PL"): string {
+  const name = new Intl.DateTimeFormat(locale, { month: "long" }).format(monthDate(key));
+  return capitalize(name.slice(0, 3), locale);
 }
 
 export function nextMonth(m: string): string {
@@ -80,6 +110,10 @@ export function currentMonthStr(d = new Date()): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
 }
 
+export function lastDayOfMonth(monthKey: string): string {
+  return `${monthKey}-${pad2(daysInMonth(monthKey))}`;
+}
+
 export function daysInMonth(monthKey: string): number {
   const [yStr, mStr] = monthKey.split("-");
   return new Date(parseInt(yStr, 10), parseInt(mStr, 10), 0).getDate();
@@ -99,10 +133,12 @@ export function recurringForMonth(recurring: RecurringExpense[], monthKey: strin
       id: `rec_${r.id}_${monthKey}`,
       // Clamp to the month's last day — e.g. a day-31 template still fires in February.
       date: `${monthKey}-${pad2(Math.min(r.day_of_month, daysInMonth(monthKey)))}`,
-      category: r.category,
+      category_id: r.category_id,
       desc: r.desc,
       amount: r.amount,
       icon: r.icon,
+      currency: r.currency,
+      fx_rate: r.fx_by_month?.[monthKey] ?? r.fx_rate,
       recurring: true as const,
       templateId: r.id,
       month: monthKey,
@@ -120,6 +156,9 @@ export function recurringIncomesForMonth(recurring: RecurringIncome[], monthKey:
       amount: r.amount,
       desc: r.desc,
       icon: r.icon,
+      vat_rate: Number(r.vat_rate) || 0,
+      currency: r.currency,
+      fx_rate: r.fx_by_month?.[monthKey] ?? r.fx_rate,
       recurring: true as const,
       templateId: r.id,
     }));
@@ -141,22 +180,73 @@ export function monthExpenseTotal(
   recurring: RecurringExpense[],
   monthKey: string
 ): number {
-  return expensesForMonth(expenses, recurring, monthKey).reduce((s, x) => s + x.amount, 0);
+  return expensesForMonth(expenses, recurring, monthKey).reduce((s, x) => s + baseAmount(x), 0);
 }
 
 export function incomesForMonth(incomes: Income[], recurring: RecurringIncome[], monthKey: string): AnyIncome[] {
   return [...incomes.filter((x) => x.month === monthKey), ...recurringIncomesForMonth(recurring, monthKey)];
 }
 
+/** Gross (with VAT) income for the month — what's shown as "Zarobek". */
 export function monthIncomeTotal(incomes: Income[], recurring: RecurringIncome[], monthKey: string): number {
-  return incomesForMonth(incomes, recurring, monthKey).reduce((s, x) => s + x.amount, 0);
+  return incomesForMonth(incomes, recurring, monthKey).reduce((s, x) => s + grossBase(x), 0);
 }
 
-export function monthZlH(incomes: Income[], recurring: RecurringIncome[], monthKey: string): number {
-  const items = incomesForMonth(incomes, recurring, monthKey);
-  const hours = items.reduce((s, x) => s + (x.hours || 0), 0);
-  const amount = items.reduce((s, x) => s + (x.hours ? x.amount : 0), 0);
-  return hours > 0 ? amount / hours : 0;
+export function monthIncomeNet(incomes: Income[], recurring: RecurringIncome[], monthKey: string): number {
+  return incomesForMonth(incomes, recurring, monthKey).reduce((s, x) => s + baseAmount(x), 0);
+}
+
+/** Resolves a category id to its role (ZUS / income tax / VAT) — see useCategories. */
+export type RoleOf = (categoryId: string) => CategoryRole | null;
+
+function roleSum(expenses: Expense[], recurring: RecurringExpense[], monthKey: string, roleOf: RoleOf, role: CategoryRole): number {
+  return expensesForMonth(expenses, recurring, monthKey)
+    .filter((x) => roleOf(x.category_id) === role)
+    .reduce((s, x) => s + baseAmount(x), 0);
+}
+
+/** "Zostaje na czysto": gross income minus the VAT on those invoices minus
+ * expenses. Expenses in the VAT category are left out so VAT isn't taken
+ * off twice (once from the invoices, once as a recorded payment). */
+export function monthBalance(
+  incomes: Income[],
+  recurringIncomes: RecurringIncome[],
+  expenses: Expense[],
+  recurring: RecurringExpense[],
+  monthKey: string,
+  roleOf: RoleOf
+) {
+  const gross = monthIncomeTotal(incomes, recurringIncomes, monthKey);
+  const net = monthIncomeNet(incomes, recurringIncomes, monthKey);
+  const spent = monthExpenseTotal(expenses, recurring, monthKey) - roleSum(expenses, recurring, monthKey, roleOf, "vat");
+  return { gross, vat: gross - net, spent, balance: net - spent };
+}
+
+/** Hourly rates from work income only (every type except "inne"), counting
+ * only entries that have hours:
+ * - `beforeTax`: net of VAT, before ZUS and income tax;
+ * - `takeHome`: after also subtracting the month's ZUS and income-tax expenses
+ *   (categories with role "zus" / "income_tax"). */
+export function monthHourlyRates(
+  incomes: Income[],
+  recurringIncomes: RecurringIncome[],
+  expenses: Expense[],
+  recurring: RecurringExpense[],
+  monthKey: string,
+  roleOf: RoleOf
+) {
+  const work = incomesForMonth(incomes, recurringIncomes, monthKey).filter((x) => x.type !== "inne" && x.hours > 0);
+  const hours = work.reduce((s, x) => s + x.hours, 0);
+  const net = work.reduce((s, x) => s + baseAmount(x), 0);
+  const zus = roleSum(expenses, recurring, monthKey, roleOf, "zus");
+  const tax = roleSum(expenses, recurring, monthKey, roleOf, "income_tax");
+  return {
+    hours,
+    zus,
+    tax,
+    beforeTax: hours > 0 ? net / hours : 0,
+    takeHome: hours > 0 ? (net - zus - tax) / hours : 0,
+  };
 }
 
 /** All months that have any activity, sorted ascending, including every month
@@ -183,39 +273,11 @@ export function allMonthsSorted(
 }
 
 export function savingsBalance(initial: number, entries: SavingsEntry[]): number {
-  return initial + entries.reduce((sum, e) => sum + e.amount, 0);
+  return initial + entries.reduce((sum, e) => sum + baseAmount(e), 0);
 }
 
 export function savingsForMonth(entries: SavingsEntry[], monthKey: string): number {
   return entries
     .filter((e) => e.date.slice(0, 7) === monthKey)
-    .reduce((sum, e) => sum + e.amount, 0);
-}
-
-export interface CategoryTotal {
-  category: string;
-  amount: number;
-}
-
-export function categoryBreakdown(
-  expenses: Expense[],
-  recurring: RecurringExpense[],
-  months: string[]
-): CategoryTotal[] {
-  const totals: Record<string, number> = {};
-  months.forEach((m) => {
-    expensesForMonth(expenses, recurring, m).forEach((x) => {
-      totals[x.category] = (totals[x.category] || 0) + x.amount;
-    });
-  });
-  let arr = Object.entries(totals)
-    .map(([category, amount]) => ({ category, amount }))
-    .sort((a, b) => b.amount - a.amount);
-  if (arr.length > 8) {
-    const top = arr.slice(0, 7);
-    const restSum = arr.slice(7).reduce((s, x) => s + x.amount, 0);
-    top.push({ category: "Pozostałe", amount: restSum });
-    arr = top;
-  }
-  return arr;
+    .reduce((sum, e) => sum + baseAmount(e), 0);
 }

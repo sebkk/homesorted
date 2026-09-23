@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
+import { useIntlLocale } from "@/i18n/useFormat";
+import { CURRENCIES, currencyName } from "@/lib/currencies";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -14,12 +17,16 @@ const CAT_VARS = [
 ];
 
 export default function ZonesPage() {
+  const t = useTranslations("zones");
+  const tf = useTranslations("finance");
+  const intlLocale = useIntlLocale();
   const router = useRouter();
   const supabase = createClient();
   const [zones, setZones] = useState<Zone[]>([]);
   const [loading, setLoading] = useState(true);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [newName, setNewName] = useState("");
+  const [newCurrency, setNewCurrency] = useState("PLN");
 
   useEffect(() => {
     let cancelled = false;
@@ -45,7 +52,7 @@ export default function ZonesPage() {
 
   async function handleCreate() {
     if (!newName.trim()) return;
-    const { data, error } = await createZone(newName.trim());
+    const { data, error } = await createZone(newName.trim(), newCurrency);
     if (!error && data) {
       setSheetOpen(false);
       setNewName("");
@@ -59,17 +66,17 @@ export default function ZonesPage() {
         style={{ paddingTop: "calc(14px + env(safe-area-inset-top, 0px))", paddingBottom: "12px" }}>
         <Link
           href="/launcher"
-          aria-label="Wróć do pulpitu"
+          aria-label={tf("backToLauncher")}
           className="w-8 h-8 rounded-md border border-border bg-surface-2 text-ink-muted flex items-center justify-center"
         >
           <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
             <path d="M15 18l-6-6 6-6" />
           </svg>
         </Link>
-        <span className="font-bold text-[16px] tracking-tight">Finanse — strefy</span>
+        <span className="font-bold text-[16px] tracking-tight">{t("title")}</span>
         <button
           type="button"
-          aria-label="Nowa strefa"
+          aria-label={t("new")}
           onClick={() => setSheetOpen(true)}
           className="w-8 h-8 rounded-md border border-border bg-surface-2 text-ink-muted flex items-center justify-center"
         >
@@ -81,12 +88,12 @@ export default function ZonesPage() {
 
       <div className="flex-1 min-h-0 overflow-y-auto px-5" style={{ paddingTop: "22px", paddingBottom: "28px" }}>
         <div className="text-[13px] text-ink-muted mb-[18px]">
-          Twoje strefy finansowe. Przypnij wybraną do pulpitu, żeby wejść w nią jednym kliknięciem.
+          {t("intro")}
         </div>
 
         {!loading && zones.length === 0 && (
           <div className="text-center py-10 px-5 text-ink-muted text-[13px]">
-            Brak stref. Dodaj pierwszą przez przycisk + w prawym górnym rogu.
+            {t("empty")}
           </div>
         )}
 
@@ -104,11 +111,12 @@ export default function ZonesPage() {
                   </svg>
                 </span>
                 <span className="text-[13.5px] font-semibold truncate">{zone.name}</span>
+                <span className="text-[11px] font-semibold text-ink-muted shrink-0">{zone.currency}</span>
               </Link>
               <button
                 type="button"
                 onClick={() => handlePin(zone)}
-                aria-label={zone.pinned ? "Odepnij od pulpitu" : "Przypnij do pulpitu"}
+                aria-label={zone.pinned ? t("unpin") : t("pin")}
                 className={`shrink-0 w-8 h-8 rounded-md border flex items-center justify-center ${
                   zone.pinned ? "bg-accent-soft border-transparent text-accent" : "bg-surface border-border text-ink-faint"
                 }`}
@@ -123,23 +131,37 @@ export default function ZonesPage() {
       </div>
 
       <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)}>
-        <SheetHeader title="Nowa strefa" onClose={() => setSheetOpen(false)} />
-        <Field label="Nazwa" htmlFor="zoneName">
+        <SheetHeader title={t("new")} onClose={() => setSheetOpen(false)} />
+        <Field label={t("name")} htmlFor="zoneName">
           <input
             id="zoneName"
             type="text"
-            placeholder="np. Finanse firmowe"
+            placeholder={t("namePlaceholder")}
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             className="text-[14.5px] font-medium text-ink bg-surface-2 border border-border rounded-md px-3 py-2.5 outline-none focus:border-accent"
           />
+        </Field>
+        <Field label={t("currency")} htmlFor="zoneCurrency" hint={t("currencyHint")}>
+          <select
+            id="zoneCurrency"
+            value={newCurrency}
+            onChange={(e) => setNewCurrency(e.target.value)}
+            className="text-[14.5px] font-medium text-ink bg-surface-2 border border-border rounded-md px-3 py-2.5 outline-none focus:border-accent"
+          >
+            {CURRENCIES.map((c) => (
+              <option key={c} value={c}>
+                {c} — {currencyName(c, intlLocale)}
+              </option>
+            ))}
+          </select>
         </Field>
         <button
           type="button"
           onClick={handleCreate}
           className="font-bold text-[14.5px] text-accent-ink bg-accent rounded-md py-3 mb-1"
         >
-          Utwórz
+          {t("create")}
         </button>
       </Sheet>
     </div>

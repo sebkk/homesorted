@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useZoneData } from "@/lib/useZoneData";
 import { currentMonthStr } from "@/lib/finance";
@@ -11,14 +12,17 @@ import { IncomesTab } from "@/components/finance/IncomesTab";
 import { ExpensesTab } from "@/components/finance/ExpensesTab";
 import { SavingsTab } from "@/components/finance/SavingsTab";
 import { FinanceSheets, SheetState } from "@/components/finance/FinanceSheets";
+import { MoneyProvider } from "@/components/finance/MoneyContext";
 
-export function FinanceView({ zoneId, zoneName }: { zoneId: string; zoneName: string }) {
+export function FinanceView({ zoneId, zoneName, zoneCurrency }: { zoneId: string; zoneName: string; zoneCurrency: string }) {
+  const t = useTranslations("finance");
   const [tab, setTab] = useState<FinanceTab>("dashboard");
   const [sheet, setSheet] = useState<SheetState>(null);
-  const zd = useZoneData(zoneId);
   const currentMonth = currentMonthStr();
+  const zd = useZoneData(zoneId, zoneCurrency, currentMonth);
 
   return (
+    <MoneyProvider currency={zoneCurrency}>
     <div className="flex-1 flex flex-col min-h-0 relative">
       <header
         className="sticky top-0 z-20 bg-surface glass flex items-center justify-between border-b border-border px-5"
@@ -30,10 +34,11 @@ export function FinanceView({ zoneId, zoneName }: { zoneId: string; zoneName: st
             <path d="M7 17.5L10.5 12L13.5 15L19 8" stroke="var(--accent-ink)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           <span className="font-bold text-[16px] tracking-tight">{zoneName}</span>
+          <span className="text-[11px] font-semibold text-ink-muted bg-surface-2 border border-border rounded-full px-2 py-0.5">{zoneCurrency}</span>
         </div>
         <Link
           href="/launcher"
-          aria-label="Wróć do pulpitu"
+          aria-label={t("backToLauncher")}
           className="w-8 h-8 rounded-md border border-border bg-surface-2 text-ink-muted flex items-center justify-center"
         >
           <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -45,7 +50,7 @@ export function FinanceView({ zoneId, zoneName }: { zoneId: string; zoneName: st
 
       <main className="flex-1 min-h-0 overflow-y-auto px-5 pt-4" style={{ paddingBottom: "112px" }}>
         {zd.loading ? (
-          <div className="text-center py-10 text-ink-muted text-[13px]">Wczytywanie…</div>
+          <div className="text-center py-10 text-ink-muted text-[13px]">{t("loading")}</div>
         ) : tab === "dashboard" ? (
           <DashboardTab
             zd={zd}
@@ -53,6 +58,7 @@ export function FinanceView({ zoneId, zoneName }: { zoneId: string; zoneName: st
             onAddIncome={() => setSheet({ type: "income" })}
             onAddExpense={() => setSheet({ type: "expense" })}
             onEditBudgets={() => setSheet({ type: "budgets" })}
+            onOpenStats={(month) => setSheet({ type: "monthStats", month })}
           />
         ) : tab === "incomes" ? (
           <IncomesTab
@@ -80,6 +86,7 @@ export function FinanceView({ zoneId, zoneName }: { zoneId: string; zoneName: st
       </main>
 
       <Fab
+        label={tab === "incomes" ? t("addIncome") : tab === "savings" ? t("addSavings") : t("addExpense")}
         onClick={() =>
           setSheet({
             type: tab === "incomes" ? "income" : tab === "savings" ? "savings" : "expense",
@@ -91,5 +98,6 @@ export function FinanceView({ zoneId, zoneName }: { zoneId: string; zoneName: st
 
       <FinanceSheets zd={zd} sheet={sheet} onClose={() => setSheet(null)} currentMonth={currentMonth} />
     </div>
+    </MoneyProvider>
   );
 }

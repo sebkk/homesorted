@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 
 interface ToastState {
   message: string;
@@ -14,6 +15,7 @@ interface ToastContextValue {
 const ToastContext = createContext<ToastContextValue | null>(null);
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
+  const t = useTranslations("common");
   const [toast, setToast] = useState<ToastState | null>(null);
   const [visible, setVisible] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -43,7 +45,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               setVisible(false);
             }}
           >
-            Cofnij
+            {t("undo")}
           </button>
         )}
       </div>

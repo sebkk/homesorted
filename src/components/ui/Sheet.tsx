@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 interface SheetProps {
   open: boolean;
   onClose: () => void;
@@ -28,12 +30,13 @@ export function Sheet({ open, onClose, children }: SheetProps) {
 }
 
 export function SheetHeader({ title, onClose }: { title: string; onClose: () => void }) {
+  const t = useTranslations("common");
   return (
     <div className="flex items-center justify-between">
       <h3 className="text-base font-semibold">{title}</h3>
       <button
         type="button"
-        aria-label="Zamknij"
+        aria-label={t("close")}
         onClick={onClose}
         className="w-[30px] h-[30px] rounded-md border-none bg-surface-2 text-ink-muted flex items-center justify-center"
       >

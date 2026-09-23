@@ -1,12 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { fmt, monthLabel } from "@/lib/finance";
+import { useMoney } from "@/components/finance/MoneyContext";
+import { useMonthFormat } from "@/i18n/useFormat";
 import { Collapsible } from "@/components/ui/Collapsible";
 import { ChevronIcon } from "@/components/finance/icons";
 
 /** A month heading with its total that collapses its list; expanded by default. */
 export function MonthGroup({ month, total, children }: { month: string; total: number; children: React.ReactNode }) {
+  const { fmt } = useMoney();
+  const { month: monthLabel } = useMonthFormat();
   const [open, setOpen] = useState(true);
   return (
     <div className="mb-[18px]">

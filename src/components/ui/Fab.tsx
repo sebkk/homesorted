@@ -1,4 +1,4 @@
-export function Fab({ onClick, label = "Dodaj" }: { onClick: () => void; label?: string }) {
+export function Fab({ onClick, label }: { onClick: () => void; label: string }) {
   return (
     <button
       type="button"

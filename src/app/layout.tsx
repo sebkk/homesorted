@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getTranslations } from "next-intl/server";
 import { ToastProvider } from "@/components/ui/Toast";
 
 const ibmPlexSans = IBM_Plex_Sans({
@@ -10,9 +12,13 @@ const ibmPlexSans = IBM_Plex_Sans({
   display: "swap",
 });
 
-export const metadata: Metadata = {
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("meta");
+  return { ...metadata, description: t("description") };
+}
+
+const metadata: Metadata = {
   title: "HomeSorted",
-  description: "Ogarnij swoje sprawy — finanse i nie tylko.",
   manifest: "/manifest.json",
   icons: {
     icon: [
@@ -23,7 +29,7 @@ export const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
+    statusBarStyle: "black",
     title: "HomeSorted",
   },
 };
@@ -32,15 +38,19 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#eef1f3",
+  themeColor: "#0d1114",
+  colorScheme: "dark",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = await getLocale();
   return (
-    <html lang="pl" className={ibmPlexSans.variable}>
+    <html lang={locale} className={ibmPlexSans.variable}>
       <body className="font-sans flex justify-center">
         <div className="w-full max-w-[480px] min-h-dvh md:min-h-[min(860px,calc(100dvh-48px))] md:my-6 md:rounded-[20px] md:overflow-hidden bg-surface glass border border-border shadow-glass relative flex flex-col">
-          <ToastProvider>{children}</ToastProvider>
+          <NextIntlClientProvider>
+            <ToastProvider>{children}</ToastProvider>
+          </NextIntlClientProvider>
         </div>
         <ServiceWorkerRegister />
       </body>

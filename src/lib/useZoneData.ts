@@ -1,8 +1,21 @@
 "use client";
 
-import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { CategoryBudget, Expense, Income, RecurringExpense, RecurringIncome, RecurringTemplate, SavingsEntry } from "@/lib/types";
+import { daysInMonth, isActiveInMonth, lastDayOfMonth, nextMonth, pad2 } from "@/lib/finance";
+
+/** Months a template has occurrences in, up to `currentMonth`. */
+function occurrenceMonths(t: RecurringTemplate, currentMonth: string): string[] {
+  const months: string[] = [];
+  for (let m = t.start_month, guard = 0; m <= currentMonth && guard < 240; m = nextMonth(m), guard++) {
+    if (isActiveInMonth(t, m)) months.push(m);
+  }
+  return months;
+}
+
+const expenseDate = (r: RecurringExpense, m: string) => `${m}-${pad2(Math.min(r.day_of_month, daysInMonth(m)))}`;
+const incomeDate = (_: RecurringIncome, m: string) => lastDayOfMonth(m);
 
 // Client-side data layer for one zone. Fetches everything once on mount
 // (sync is "poll at startup", per the agreed stack) and keeps local state in
@@ -11,7 +24,7 @@ import { CategoryBudget, Expense, Income, RecurringExpense, RecurringIncome, Rec
 // database; on failure it reports via the thrown/returned error so the
 // caller's undo affordance (the Toast "Cofnij" button) can revert cleanly.
 
-export function useZoneData(zoneId: string | null) {
+export function useZoneData(zoneId: string | null, zoneCurrency = "PLN", currentMonth = "") {
   const supabase = createClient();
   const [loading, setLoading] = useState(true);
   const [incomes, setIncomes] = useState<Income[]>([]);
@@ -21,6 +34,9 @@ export function useZoneData(zoneId: string | null) {
   const [savingsInitial, setSavingsInitialState] = useState(0);
   const [savingsEntries, setSavingsEntries] = useState<SavingsEntry[]>([]);
   const [budgets, setBudgets] = useState<CategoryBudget[]>([]);
+  // NBP rates for each occurrence of foreign-currency templates, keyed
+  // "CUR@date@ZONE"; NaN marks "NBP has no rate" so it isn't refetched.
+  const [fxRates, setFxRates] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (!zoneId) return;
@@ -49,6 +65,62 @@ export function useZoneData(zoneId: string | null) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zoneId]);
+
+  // ---------- per-month FX for foreign-currency templates ----------
+  const fxKey = (currency: string, date: string) => `${currency}@${date}@${zoneCurrency}`;
+  const neededFx = useMemo(() => {
+    const items = new Map<string, { currency: string; date: string }>();
+    const collect = <T extends RecurringTemplate & { currency: string }>(list: T[], dateOf: (r: T, m: string) => string) => {
+      for (const r of list) {
+        if (r.currency === zoneCurrency) continue;
+        for (const m of occurrenceMonths(r, currentMonth)) {
+          const date = dateOf(r, m);
+          items.set(fxKey(r.currency, date), { currency: r.currency, date });
+        }
+      }
+    };
+    collect(recurring, expenseDate);
+    collect(recurringIncomes, incomeDate);
+    return items;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recurring, recurringIncomes, zoneCurrency, currentMonth]);
+
+  const missingFx = [...neededFx.entries()].filter(([k]) => !(k in fxRates));
+  const missingKey = missingFx.map(([k]) => k).join("|");
+
+  useEffect(() => {
+    if (!missingKey) return;
+    let cancelled = false;
+    const items = missingFx.map(([, v]) => v);
+    fetch("/api/fx", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: zoneCurrency, items }) })
+      .then((r) => r.json())
+      .then((json: { rates?: Record<string, { rate: number } | null> }) => {
+        if (cancelled) return;
+        const next: Record<string, number> = {};
+        for (const { currency, date } of items) next[fxKey(currency, date)] = json.rates?.[`${currency}@${date}`]?.rate ?? NaN;
+        setFxRates((prev) => ({ ...prev, ...next }));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [missingKey, zoneCurrency]);
+
+  function withMonthlyFx<T extends RecurringTemplate & { currency: string; fx_by_month?: Record<string, number> }>(
+    list: T[],
+    dateOf: (r: T, m: string) => string
+  ): T[] {
+    return list.map((r) => {
+      if (r.currency === zoneCurrency) return r;
+      const byMonth: Record<string, number> = {};
+      for (const m of occurrenceMonths(r, currentMonth)) {
+        const rate = fxRates[fxKey(r.currency, dateOf(r, m))];
+        if (Number.isFinite(rate)) byMonth[m] = rate;
+      }
+      return { ...r, fx_by_month: byMonth };
+    });
+  }
 
   // ---------- incomes ----------
   async function addIncome(income: Omit<Income, "id" | "zone_id">) {
@@ -247,19 +319,19 @@ export function useZoneData(zoneId: string | null) {
   async function saveBudgets(limits: Record<string, number>) {
     if (!zoneId) return;
     const keep = Object.entries(limits).filter(([, amount]) => amount > 0);
-    const drop = budgets.map((b) => b.category).filter((c) => !keep.some(([k]) => k === c));
+    const drop = budgets.map((b) => b.category_id).filter((c) => !keep.some(([k]) => k === c));
 
     if (keep.length > 0) {
       const { error } = await supabase
         .from("category_budgets")
-        .upsert(keep.map(([category, amount]) => ({ zone_id: zoneId, category, amount })));
+        .upsert(keep.map(([category_id, amount]) => ({ zone_id: zoneId, category_id, amount })));
       if (error) return error;
     }
     if (drop.length > 0) {
-      const { error } = await supabase.from("category_budgets").delete().eq("zone_id", zoneId).in("category", drop);
+      const { error } = await supabase.from("category_budgets").delete().eq("zone_id", zoneId).in("category_id", drop);
       if (error) return error;
     }
-    setBudgets(keep.map(([category, amount]) => ({ zone_id: zoneId, category, amount })));
+    setBudgets(keep.map(([category_id, amount]) => ({ zone_id: zoneId, category_id, amount })));
     return null;
   }
 
@@ -269,7 +341,7 @@ export function useZoneData(zoneId: string | null) {
     saveBudgets,
     incomes,
     expenses,
-    recurring,
+    recurring: withMonthlyFx(recurring, expenseDate),
     savingsInitial,
     savingsEntries,
     addIncome,
@@ -280,7 +352,7 @@ export function useZoneData(zoneId: string | null) {
     updateExpense,
     deleteExpense,
     restoreExpense,
-    recurringIncomes,
+    recurringIncomes: withMonthlyFx(recurringIncomes, incomeDate),
     recurringExpenseOps,
     recurringIncomeOps,
     setSavingsInitial,

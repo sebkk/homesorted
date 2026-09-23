@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
+import { LanguageSwitch } from "@/components/ui/LanguageSwitch";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/lib/actions";
 import { Zone } from "@/lib/types";
@@ -15,6 +17,7 @@ const CAT_VARS = [
 ];
 
 export default async function LauncherPage() {
+  const t = await getTranslations("launcher");
   const supabase = await createClient();
   const {
     data: { user },
@@ -35,13 +38,16 @@ export default async function LauncherPage() {
         className="flex-1 min-h-0 overflow-y-auto px-5"
         style={{ paddingTop: "calc(22px + env(safe-area-inset-top, 0px))", paddingBottom: "28px" }}
       >
-        <div className="text-[19px] font-bold mt-1 mb-0.5 tracking-tight">Cześć, {displayName}</div>
-        <div className="text-[13px] text-ink-muted mb-[18px]">Wybierz obszar, którym chcesz się zająć.</div>
+        <div className="flex items-start justify-between gap-3">
+          <div className="text-[19px] font-bold mt-1 mb-0.5 tracking-tight min-w-0 break-words">{t("hello", { name: displayName })}</div>
+          <LanguageSwitch className="shrink-0" />
+        </div>
+        <div className="text-[13px] text-ink-muted mb-[18px]">{t("intro")}</div>
 
         {pinnedZones.length > 0 && (
           <div className="mb-1">
             <div className="section-title text-[13px] font-semibold text-ink-muted uppercase tracking-wider mb-2.5">
-              Przypięte
+              {t("pinned")}
             </div>
             <div className="grid grid-cols-2 gap-3 mb-1">
               {pinnedZones.map((zone) => (
@@ -60,7 +66,7 @@ export default async function LauncherPage() {
                     <FinanceIcon />
                   </span>
                   <span className="text-[13.5px] font-bold">{zone.name}</span>
-                  <span className="text-[11.5px] text-ink-muted leading-snug">Finanse</span>
+                  <span className="text-[11.5px] text-ink-muted leading-snug">{t("finance")}</span>
                 </Link>
               ))}
             </div>
@@ -68,7 +74,7 @@ export default async function LauncherPage() {
         )}
 
         <div className="section-title text-[13px] font-semibold text-ink-muted uppercase tracking-wider mt-[22px] mb-2.5">
-          Moduły
+          {t("modules")}
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Link
@@ -78,8 +84,8 @@ export default async function LauncherPage() {
             <span className="w-[38px] h-[38px] rounded-md bg-accent-soft text-accent flex items-center justify-center shrink-0">
               <FinanceIcon />
             </span>
-            <span className="text-[13.5px] font-bold">Finanse</span>
-            <span className="text-[11.5px] text-ink-muted leading-snug">Zarobki, wydatki i oszczędności</span>
+            <span className="text-[13.5px] font-bold">{t("finance")}</span>
+            <span className="text-[11.5px] text-ink-muted leading-snug">{t("financeDesc")}</span>
           </Link>
           <div className="bg-surface-2 border border-border rounded-xl p-4 flex flex-col gap-2.5 opacity-55">
             <span className="w-[38px] h-[38px] rounded-md bg-surface-3 text-ink-faint flex items-center justify-center shrink-0">
@@ -89,10 +95,10 @@ export default async function LauncherPage() {
                 <path d="M12 13v8" />
               </svg>
             </span>
-            <span className="text-[13.5px] font-bold">Magazyn</span>
-            <span className="text-[11.5px] text-ink-muted leading-snug">Stan zapasów w mieszkaniu</span>
+            <span className="text-[13.5px] font-bold">{t("pantry")}</span>
+            <span className="text-[11.5px] text-ink-muted leading-snug">{t("pantryDesc")}</span>
             <span className="self-start text-[9.5px] font-bold uppercase tracking-wide text-ink-faint bg-surface-3 rounded-full px-2 py-0.5">
-              Wkrótce
+              {t("soon")}
             </span>
           </div>
         </div>
@@ -104,7 +110,7 @@ export default async function LauncherPage() {
           className="block flex-none w-full bg-transparent border-none border-t border-border text-ink-faint font-sans text-xs font-semibold cursor-pointer px-5 pt-3.5"
           style={{ paddingBottom: "calc(14px + env(safe-area-inset-bottom, 0px))" }}
         >
-          Wyloguj się
+          {t("signOut")}
         </button>
       </form>
     </div>

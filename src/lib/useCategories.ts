@@ -1,22 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
-
-export interface Category {
-  name: string;
-  icon: string;
-}
+import { Category, CategoryRole } from "@/lib/types";
 
 // Global, shared across all zones/users — managed as data in Supabase
 // (SQL editor / dashboard), not hardcoded, so new categories don't need a
-// code change or deploy.
+// code change or deploy. Entries reference categories by id; calculations
+// that care about a category's meaning use its `role`, never its name.
 
 // Module-level cache: categories rarely change, so every component that
-// calls useCategories() (the expense form and the expenses list can both be
-// mounted at once, and the form remounts each time its sheet opens) shares
-// one fetch instead of re-querying Supabase every time. Resets naturally on
-// a full page reload since it's plain in-memory module state.
+// calls useCategories() shares one fetch instead of re-querying Supabase.
+// Resets naturally on a full page reload since it's in-memory module state.
 let cache: Category[] | null = null;
 let inFlight: Promise<Category[]> | null = null;
 
@@ -27,7 +23,7 @@ function fetchCategories(): Promise<Category[]> {
     inFlight = Promise.resolve(
       supabase
         .from("categories")
-        .select("name, icon")
+        .select("id, key, name, icon, role, sort_order")
         .order("sort_order")
         .then(({ data }) => {
           cache = (data as Category[]) ?? [];
@@ -39,7 +35,15 @@ function fetchCategories(): Promise<Category[]> {
   return inFlight;
 }
 
-export function useCategories(): Category[] {
+export interface CategoryLookup {
+  list: Category[];
+  byId: (id: string) => Category | undefined;
+  name: (id: string) => string;
+  icon: (id: string) => string | undefined;
+  roleOf: (id: string) => CategoryRole | null;
+}
+
+export function useCategories(): CategoryLookup {
   const [categories, setCategories] = useState<Category[]>(cache ?? []);
 
   useEffect(() => {
@@ -53,5 +57,22 @@ export function useCategories(): Category[] {
     };
   }, []);
 
-  return categories;
+  const t = useTranslations("categories");
+
+  return useMemo(() => {
+    const map = new Map(categories.map((c) => [c.id, c]));
+    // Label from messages by `key`; the DB name covers categories added
+    // later in Supabase that have no translation yet.
+    const label = (c: Category) => (t.has(c.key) ? t(c.key) : c.name);
+    return {
+      list: categories,
+      byId: (id) => map.get(id),
+      name: (id) => {
+        const c = map.get(id);
+        return c ? label(c) : "";
+      },
+      icon: (id) => map.get(id)?.icon,
+      roleOf: (id) => map.get(id)?.role ?? null,
+    };
+  }, [categories, t]);
 }

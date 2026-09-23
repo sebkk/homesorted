@@ -9,6 +9,7 @@ export interface Zone {
   name: string;
   pinned: boolean;
   color: number; // 1-8, indexes into the cat1..cat8 palette
+  currency: string; // default currency: every sum in the zone is shown in it
   created_at: string;
 }
 
@@ -21,22 +22,32 @@ export interface Income {
   amount: number;
   desc: string;
   icon: string | null; // overrides INCOME_TYPE_ICONS[type] when set
+  vat_rate: number; // amount is net; gross = amount * (1 + vat_rate)
+  invoice_date: string; // "YYYY-MM-DD", drives the NBP rate date
+  currency: string; // ISO 4217 code of `amount`
+  fx_rate: number; // amount * fx_rate = value in the zone's currency (NBP, see /api/fx)
+  fx_date: string | null; // effective date of the NBP table used
+  fx_table: string | null; // NBP table number(s), for reference
 }
 
 export interface Expense {
   id: string;
   zone_id: string;
   date: string; // "YYYY-MM-DD"
-  category: string;
+  category_id: string;
   desc: string;
   amount: number;
   icon: string | null; // overrides the category's default icon when set
+  currency: string; // ISO 4217 code of `amount`
+  fx_rate: number; // amount * fx_rate = value in the zone's currency (NBP, see /api/fx)
+  fx_date: string | null; // effective date of the NBP table used
+  fx_table: string | null; // NBP table number(s), for reference
 }
 
 export interface RecurringExpense {
   id: string;
   zone_id: string;
-  category: string;
+  category_id: string;
   desc: string;
   amount: number;
   day_of_month: number;
@@ -45,6 +56,12 @@ export interface RecurringExpense {
   skip_months: string[]; // one-off exceptions
   icon: string | null; // overrides the category's default icon when set
   created_at: string;
+  currency: string; // ISO 4217 code of `amount`
+  fx_rate: number; // amount * fx_rate = value in the zone's currency (NBP, see /api/fx)
+  fx_date: string | null; // effective date of the NBP table used
+  fx_table: string | null; // NBP table number(s), for reference
+  /** Client-only: NBP rate per occurrence month (foreign currency templates). */
+  fx_by_month?: Record<string, number>;
 }
 
 export interface SavingsEntry {
@@ -53,6 +70,10 @@ export interface SavingsEntry {
   date: string;
   desc: string;
   amount: number; // negative = withdrawal
+  currency: string; // ISO 4217 code of `amount`
+  fx_rate: number; // amount * fx_rate = value in the zone's currency (NBP, see /api/fx)
+  fx_date: string | null; // effective date of the NBP table used
+  fx_table: string | null; // NBP table number(s), for reference
 }
 
 export interface RecurringIncome {
@@ -63,10 +84,28 @@ export interface RecurringIncome {
   amount: number;
   desc: string;
   icon: string | null;
+  vat_rate: number; // amount is net
   start_month: string; // "YYYY-MM"
   end_month: string | null; // exclusive, forward-only cutoff
   skip_months: string[];
   created_at: string;
+  currency: string; // ISO 4217 code of `amount`
+  fx_rate: number; // amount * fx_rate = value in the zone's currency (NBP, see /api/fx)
+  fx_date: string | null; // effective date of the NBP table used
+  fx_table: string | null; // NBP table number(s), for reference
+  fx_by_month?: Record<string, number>;
+}
+
+/** Special meaning of a category, used by calculations (never matched by name). */
+export type CategoryRole = "zus" | "income_tax" | "vat";
+
+export interface Category {
+  id: string;
+  key: string; // stable identifier, also the translation key
+  name: string; // default (Polish) label, fallback when no translation exists
+  icon: string;
+  role: CategoryRole | null;
+  sort_order: number;
 }
 
 /** Fields shared by recurring expense and income templates. */
@@ -81,7 +120,7 @@ export interface RecurringTemplate {
 
 export interface CategoryBudget {
   zone_id: string;
-  category: string;
+  category_id: string;
   amount: number; // monthly limit, applies to every month
 }
 
@@ -95,10 +134,12 @@ export interface SavingsState {
 export interface RecurringOccurrence {
   id: string; // "rec_<templateId>_<month>"
   date: string;
-  category: string;
+  category_id: string;
   desc: string;
   amount: number;
   icon: string | null;
+  currency: string;
+  fx_rate: number;
   recurring: true;
   templateId: string;
   month: string;
@@ -115,50 +156,19 @@ export interface RecurringIncomeOccurrence {
   amount: number;
   desc: string;
   icon: string | null;
+  vat_rate: number;
+  currency: string;
+  fx_rate: number;
   recurring: true;
   templateId: string;
 }
 
+export const VAT_RATE = 0.23;
+
 export type AnyIncome = Income | RecurringIncomeOccurrence;
 
-export const MONTHS = [
-  "Styczeń",
-  "Luty",
-  "Marzec",
-  "Kwiecień",
-  "Maj",
-  "Czerwiec",
-  "Lipiec",
-  "Sierpień",
-  "Wrzesień",
-  "Październik",
-  "Listopad",
-  "Grudzień",
-];
-
-// Genitive case ("od stycznia", "do grudnia") — used after prepositions like "od"/"do".
-export const MONTHS_GENITIVE = [
-  "stycznia",
-  "lutego",
-  "marca",
-  "kwietnia",
-  "maja",
-  "czerwca",
-  "lipca",
-  "sierpnia",
-  "września",
-  "października",
-  "listopada",
-  "grudnia",
-];
-
-export const INCOME_TYPE_LABELS: Record<IncomeType, string> = {
-  b2b: "Faktura B2B",
-  uop: "Umowa o pracę (UoP)",
-  uz: "Umowa zlecenie (UZ)",
-  uod: "Umowa o dzieło (UoD)",
-  inne: "Inny przychód",
-};
+/** Display order of income types; labels live in messages ("incomeTypes"). */
+export const INCOME_TYPES: IncomeType[] = ["b2b", "uop", "uz", "uod", "inne"];
 
 export const INCOME_TYPE_ICONS: Record<IncomeType, string> = {
   b2b: "🧾",

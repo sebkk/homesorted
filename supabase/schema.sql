@@ -11,6 +11,8 @@ create table if not exists public.zones (
   name text not null default 'Strefa',
   pinned boolean not null default false,
   color smallint not null default 1 check (color between 1 and 8),
+  -- default currency: every sum in the zone is shown in it (chosen at creation)
+  currency text not null default 'PLN' check (currency ~ '^[A-Z]{3}$'),
   created_at timestamptz not null default now()
 );
 
@@ -19,11 +21,14 @@ create table if not exists public.incomes (
   id uuid primary key default gen_random_uuid(),
   zone_id uuid not null references public.zones(id) on delete cascade,
   month text not null, -- 'YYYY-MM'
+  invoice_date date not null, -- drives the NBP rate date
   type text not null default 'b2b' check (type in ('b2b','uop','uz','uod','inne')),
   hours numeric not null default 0,
   amount numeric not null default 0,
   "desc" text not null default '',
   icon text, -- overrides INCOME_TYPE_ICONS[type] (app-side) when set
+  -- amount is always NET; gross = amount * (1 + vat_rate). Totals use net.
+  vat_rate numeric not null default 0 check (vat_rate >= 0 and vat_rate < 1),
   created_at timestamptz not null default now()
 );
 
@@ -31,37 +36,43 @@ create table if not exists public.incomes (
 -- Global, shared across all users — managed here / via SQL editor, not per-zone.
 create table if not exists public.categories (
   id uuid primary key default gen_random_uuid(),
-  name text not null unique,
+  key text not null unique, -- stable identifier and translation key
+  name text not null unique, -- default (Polish) label
+  -- special meaning used by calculations; at most one category per role
+  role text check (role in ('zus', 'income_tax', 'vat')),
   icon text not null default '💳',
   sort_order smallint not null default 0,
   created_at timestamptz not null default now()
 );
 
-insert into public.categories (name, icon, sort_order) values
-  ('ZUS', '🏛️', 1),
-  ('Podatek', '💰', 2),
-  ('VAT', '🧾', 3),
-  ('Mieszkanie/czynsz', '🏠', 4),
-  ('Kredyt', '🏦', 5),
-  ('Rachunki (prąd, internet)', '💡', 6),
-  ('Jedzenie', '🍔', 7),
-  ('Transport/paliwo', '⛽', 8),
-  ('Sprzęt/oprogramowanie', '💻', 9),
-  ('Księgowość', '📊', 10),
-  ('Ubezpieczenie', '🛡️', 11),
-  ('Abonamenty', '📺', 12),
-  ('Rozwój/szkolenia', '📚', 13),
-  ('Zdrowie', '🩺', 14),
-  ('Rozrywka', '🎮', 15),
-  ('Inne', '📦', 16)
-on conflict (name) do nothing;
+create unique index if not exists categories_role_unique on public.categories (role) where role is not null;
+
+insert into public.categories (key, name, role, icon, sort_order) values
+  ('zus', 'ZUS', 'zus', '🏛️', 1),
+  ('income_tax', 'Podatek', 'income_tax', '💰', 2),
+  ('vat', 'VAT', 'vat', '🧾', 3),
+  ('housing', 'Mieszkanie/czynsz', null, '🏠', 4),
+  ('loan', 'Kredyt', null, '🏦', 5),
+  ('utilities', 'Rachunki (prąd, internet)', null, '💡', 6),
+  ('food', 'Jedzenie', null, '🍔', 7),
+  ('transport', 'Transport/paliwo', null, '⛽', 8),
+  ('equipment', 'Sprzęt/oprogramowanie', null, '💻', 9),
+  ('accounting', 'Księgowość', null, '📊', 10),
+  ('insurance', 'Ubezpieczenie', null, '🛡️', 11),
+  ('subscriptions', 'Abonamenty', null, '📺', 12),
+  ('education', 'Rozwój/szkolenia', null, '📚', 13),
+  ('health', 'Zdrowie', null, '🩺', 14),
+  ('entertainment', 'Rozrywka', null, '🎮', 15),
+  ('vacation', 'Urlop/wakacje', null, '🏖️', 16),
+  ('other', 'Inne', null, '📦', 17)
+on conflict (key) do nothing;
 
 -- ---------- one-off expenses ----------
 create table if not exists public.expenses (
   id uuid primary key default gen_random_uuid(),
   zone_id uuid not null references public.zones(id) on delete cascade,
   date date not null,
-  category text not null,
+  category_id uuid not null references public.categories(id),
   "desc" text not null default '',
   amount numeric not null default 0,
   icon text, -- overrides the category's default icon when set
@@ -75,7 +86,7 @@ create table if not exists public.expenses (
 create table if not exists public.recurring_expenses (
   id uuid primary key default gen_random_uuid(),
   zone_id uuid not null references public.zones(id) on delete cascade,
-  category text not null,
+  category_id uuid not null references public.categories(id),
   "desc" text not null default '',
   amount numeric not null default 0,
   day_of_month smallint not null default 1 check (day_of_month between 1 and 31),
@@ -97,6 +108,7 @@ create table if not exists public.recurring_incomes (
   amount numeric not null default 0,
   "desc" text not null default '',
   icon text,
+  vat_rate numeric not null default 0 check (vat_rate >= 0 and vat_rate < 1), -- amount is net
   start_month text not null,
   end_month text,
   skip_months text[] not null default '{}',
@@ -122,16 +134,19 @@ create table if not exists public.savings_entries (
 -- One monthly limit per category per zone; applies to every month.
 create table if not exists public.category_budgets (
   zone_id uuid not null references public.zones(id) on delete cascade,
-  category text not null,
+  category_id uuid not null references public.categories(id),
   amount numeric not null check (amount > 0),
   created_at timestamptz not null default now(),
-  primary key (zone_id, category)
+  primary key (zone_id, category_id)
 );
 
 -- ---------- indexes ----------
 create index if not exists idx_zones_user on public.zones(user_id);
 create index if not exists idx_incomes_zone on public.incomes(zone_id);
 create index if not exists idx_expenses_zone on public.expenses(zone_id);
+create index if not exists idx_expenses_category on public.expenses(category_id);
+create index if not exists idx_recurring_category on public.recurring_expenses(category_id);
+create index if not exists idx_category_budgets_category on public.category_budgets(category_id);
 create index if not exists idx_recurring_zone on public.recurring_expenses(zone_id);
 create index if not exists idx_recurring_incomes_zone on public.recurring_incomes(zone_id);
 create index if not exists idx_savings_entries_zone on public.savings_entries(zone_id);
@@ -193,3 +208,19 @@ create policy "recurring_incomes: owner full access" on public.recurring_incomes
   for all to authenticated
   using (exists (select 1 from public.zones z where z.id = zone_id and z.user_id = (select auth.uid())))
   with check (exists (select 1 from public.zones z where z.id = zone_id and z.user_id = (select auth.uid())));
+
+-- ---------- currencies ----------
+-- Every entry keeps its own currency and the NBP rate that converts it into
+-- the zone's currency (value in zone currency = amount * fx_rate). The rate
+-- comes from the last NBP table published before the entry's date (invoice
+-- date for incomes); 1 when the entry is already in the zone's currency.
+do $$
+declare t text;
+begin
+  foreach t in array array['incomes', 'expenses', 'recurring_expenses', 'recurring_incomes', 'savings_entries'] loop
+    execute format('alter table public.%I add column if not exists currency text not null default ''PLN'' check (currency ~ ''^[A-Z]{3}$'')', t);
+    execute format('alter table public.%I add column if not exists fx_rate numeric not null default 1 check (fx_rate > 0)', t);
+    execute format('alter table public.%I add column if not exists fx_date date', t);
+    execute format('alter table public.%I add column if not exists fx_table text', t);
+  end loop;
+end $$;

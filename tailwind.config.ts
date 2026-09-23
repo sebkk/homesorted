@@ -3,7 +3,6 @@ import type { Config } from "tailwindcss";
 // Design tokens ported 1:1 from the prototype (prototype.html) so the
 // Next.js app matches the "liquid glass" look already approved by the user.
 const config: Config = {
-  darkMode: ["class", '[data-theme="dark"]'],
   content: ["./src/**/*.{js,ts,jsx,tsx,mdx}"],
   theme: {
     extend: {

@@ -1,11 +1,12 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 export type FinanceTab = "dashboard" | "incomes" | "expenses" | "savings";
 
-const TABS: { id: FinanceTab; label: string; icon: React.ReactNode }[] = [
+const TABS: { id: FinanceTab; icon: React.ReactNode }[] = [
   {
     id: "dashboard",
-    label: "Podsumowanie",
     icon: (
       <>
         <rect x="3" y="3" width="7" height="9" rx="1.5" />
@@ -17,7 +18,6 @@ const TABS: { id: FinanceTab; label: string; icon: React.ReactNode }[] = [
   },
   {
     id: "incomes",
-    label: "Zarobki",
     icon: (
       <>
         <path d="M3 17l6-6 4 4 8-8" />
@@ -27,7 +27,6 @@ const TABS: { id: FinanceTab; label: string; icon: React.ReactNode }[] = [
   },
   {
     id: "expenses",
-    label: "Wydatki",
     icon: (
       <>
         <path d="M6 7h12l-1 13H7L6 7Z" />
@@ -37,7 +36,6 @@ const TABS: { id: FinanceTab; label: string; icon: React.ReactNode }[] = [
   },
   {
     id: "savings",
-    label: "Oszczędności",
     icon: (
       <>
         <ellipse cx="12" cy="7" rx="8" ry="3" />
@@ -49,7 +47,8 @@ const TABS: { id: FinanceTab; label: string; icon: React.ReactNode }[] = [
 ];
 
 export function FinanceTabbar({ active, onChange }: { active: FinanceTab; onChange: (tab: FinanceTab) => void }) {
-  const activeIndex = TABS.findIndex((t) => t.id === active);
+  const t = useTranslations("tabs");
+  const activeIndex = TABS.findIndex((tab) => tab.id === active);
   return (
     <nav
       className="absolute left-4 right-4 z-20 bg-nav-bg glass border border-border rounded-xl flex p-[7px_8px] shadow-glass"
@@ -88,7 +87,7 @@ export function FinanceTabbar({ active, onChange }: { active: FinanceTab; onChan
             >
               {tab.icon}
             </svg>
-            <span>{tab.label}</span>
+            <span>{t(tab.id)}</span>
           </button>
         );
       })}

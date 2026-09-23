@@ -2,11 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { LanguageSwitch } from "@/components/ui/LanguageSwitch";
 import { createClient } from "@/lib/supabase/client";
 
 type Step = "email" | "creds";
 
 export default function LoginPage() {
+  const t = useTranslations("login");
   const router = useRouter();
   const supabase = createClient();
 
@@ -40,7 +43,7 @@ export default function LoginPage() {
         // Most likely: no account yet with this email — offer to create one
         // rather than showing a raw Supabase error.
         setMode("signup");
-        setError("Nie znaleziono konta z tym hasłem. Jeśli to Twój pierwszy raz, podaj imię i załóż konto poniżej.");
+        setError(t("noAccount"));
         setBusy(false);
         return;
       }
@@ -67,7 +70,8 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col justify-center gap-4 px-7 py-8 overflow-y-auto">
+    <div className="flex-1 flex flex-col justify-center gap-4 px-7 py-8 overflow-y-auto relative">
+      <LanguageSwitch className="absolute top-4 right-4" />
       <div className="flex flex-col items-center gap-2.5 mb-2 text-center">
         <svg width={44} height={44} viewBox="0 0 26 26" fill="none">
           <rect x="1" y="1" width="24" height="24" rx="7" fill="var(--accent)" />
@@ -81,20 +85,20 @@ export default function LoginPage() {
         </svg>
         <div className="text-xl font-bold tracking-tight">HomeSorted</div>
         <div className="text-[13px] text-ink-muted leading-relaxed max-w-[280px]">
-          Podaj adres e-mail, aby się zalogować lub założyć konto.
+          {t("intro")}
         </div>
       </div>
 
       {step === "email" && (
         <form onSubmit={goToCreds} className="flex flex-col gap-3">
           <label className="flex flex-col gap-1.5 text-xs font-semibold text-ink-muted" htmlFor="email">
-            <span>Adres e-mail</span>
+            <span>{t("email")}</span>
             <input
               id="email"
               type="email"
               required
               autoComplete="email"
-              placeholder="ty@przyklad.pl"
+              placeholder={t("emailPlaceholder")}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="text-[14.5px] font-medium text-ink bg-surface-2 border border-border rounded-md px-3 py-2.5 outline-none focus:border-accent"
@@ -104,7 +108,7 @@ export default function LoginPage() {
             type="submit"
             className="font-bold text-[14.5px] text-accent-ink bg-accent rounded-md py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_6px_16px_rgba(42,120,214,0.28)]"
           >
-            Dalej
+            {t("next")}
           </button>
         </form>
       )}
@@ -122,18 +126,18 @@ export default function LoginPage() {
                 setError(null);
               }}
             >
-              Zmień
+              {t("change")}
             </button>
           </div>
 
           {mode === "signup" && (
             <label className="flex flex-col gap-1.5 text-xs font-semibold text-ink-muted" htmlFor="name">
-              <span>Imię</span>
+              <span>{t("name")}</span>
               <input
                 id="name"
                 type="text"
                 autoComplete="given-name"
-                placeholder="np. Kuba"
+                placeholder={t("namePlaceholder")}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="text-[14.5px] font-medium text-ink bg-surface-2 border border-border rounded-md px-3 py-2.5 outline-none focus:border-accent"
@@ -142,7 +146,7 @@ export default function LoginPage() {
           )}
 
           <label className="flex flex-col gap-1.5 text-xs font-semibold text-ink-muted" htmlFor="password">
-            <span>Hasło</span>
+            <span>{t("password")}</span>
             <input
               id="password"
               type="password"
@@ -162,13 +166,13 @@ export default function LoginPage() {
             disabled={busy}
             className="font-bold text-[14.5px] text-accent-ink bg-accent rounded-md py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_6px_16px_rgba(42,120,214,0.28)] disabled:opacity-60"
           >
-            {mode === "signup" ? "Załóż konto" : "Zaloguj się"}
+            {mode === "signup" ? t("signUp") : t("signIn")}
           </button>
         </form>
       )}
 
       <div className="text-center text-[11.5px] text-ink-faint leading-relaxed mt-1">
-        Twoje dane trzymane są w Supabase i zsynchronizują się między urządzeniami.
+        {t("footer")}
       </div>
     </div>
   );

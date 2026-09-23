@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { isSupportedCurrency } from "@/lib/currencies";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
@@ -10,7 +11,9 @@ export async function signOut() {
   redirect("/login");
 }
 
-export async function createZone(name: string) {
+export async function createZone(name: string, currency = "PLN") {
+  // Server actions are callable with arbitrary input: only accept known codes.
+  if (!isSupportedCurrency(currency)) return { data: null, error: "unsupported currency" };
   const supabase = await createClient();
   const {
     data: { user },
@@ -22,7 +25,7 @@ export async function createZone(name: string) {
 
   const { data, error } = await supabase
     .from("zones")
-    .insert({ user_id: user.id, name: name.trim() || "Strefa", color, pinned: false })
+    .insert({ user_id: user.id, name: name.trim() || "Strefa", color, pinned: false, currency })
     .select()
     .single();
 
