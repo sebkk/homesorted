@@ -1,0 +1,178 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------- Design tokens (ported from prototype.html) ---------- */
+:root {
+  --bg: #eef1f3;
+  --surface: rgba(255, 255, 255, 0.62);
+  --surface-2: rgba(180, 189, 198, 0.82);
+  --surface-3: rgba(255, 255, 255, 0.55);
+  --sheet-bg: rgba(255, 255, 255, 0.94);
+  --sheet-field-bg: rgba(244, 246, 247, 0.92);
+  --nav-bg: rgba(255, 255, 255, 0.82);
+  --fab-bg: rgba(42, 120, 214, 0.86);
+  --ink: #141a20;
+  --ink-muted: #5b6670;
+  --ink-faint: #8b959d;
+  --accent: #2a78d6;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(42, 120, 214, 0.16);
+  --good: #0ca30c;
+  --good-soft: rgba(12, 163, 12, 0.14);
+  --critical: #d03b3b;
+  --critical-soft: rgba(208, 59, 59, 0.14);
+  --border: rgba(255, 255, 255, 0.55);
+  --glass-blur: blur(22px) saturate(180%);
+  --shadow: 0 8px 28px rgba(20, 26, 32, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  --cat1: #2a78d6;
+  --cat2: #eb6834;
+  --cat3: #1baf7a;
+  --cat4: #eda100;
+  --cat5: #e87ba4;
+  --cat6: #008300;
+  --cat7: #4a3aa7;
+  --cat8: #e34948;
+  --cat1-soft: rgba(42, 120, 214, 0.16);
+  --cat2-soft: rgba(235, 104, 52, 0.16);
+  --cat3-soft: rgba(27, 175, 122, 0.16);
+  --cat4-soft: rgba(237, 161, 0, 0.16);
+  --cat5-soft: rgba(232, 123, 164, 0.18);
+  --cat6-soft: rgba(0, 131, 0, 0.14);
+  --cat7-soft: rgba(74, 58, 167, 0.16);
+  --cat8-soft: rgba(227, 73, 72, 0.16);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1114;
+    --surface: rgba(255, 255, 255, 0.08);
+    --surface-2: rgba(255, 255, 255, 0.05);
+    --surface-3: rgba(255, 255, 255, 0.075);
+    --sheet-bg: rgba(22, 27, 31, 0.94);
+    --sheet-field-bg: rgba(29, 35, 39, 0.92);
+    --nav-bg: rgba(22, 27, 31, 0.82);
+    --fab-bg: rgba(57, 135, 229, 0.86);
+    --ink: #f4f6f7;
+    --ink-muted: #a9b3ba;
+    --ink-faint: #6e7880;
+    --accent: #3987e5;
+    --accent-ink: #0d1114;
+    --accent-soft: rgba(57, 135, 229, 0.22);
+    --good: #0ca30c;
+    --good-soft: rgba(12, 163, 12, 0.18);
+    --critical: #d03b3b;
+    --critical-soft: rgba(208, 59, 59, 0.22);
+    --border: rgba(255, 255, 255, 0.14);
+    --shadow: 0 8px 28px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    --cat1: #3987e5;
+    --cat2: #d95926;
+    --cat3: #199e70;
+    --cat4: #c98500;
+    --cat5: #d55181;
+    --cat6: #008300;
+    --cat7: #9085e9;
+    --cat8: #e66767;
+    --cat1-soft: rgba(57, 135, 229, 0.22);
+    --cat2-soft: rgba(217, 89, 38, 0.22);
+    --cat3-soft: rgba(25, 158, 112, 0.22);
+    --cat4-soft: rgba(201, 133, 0, 0.22);
+    --cat5-soft: rgba(213, 81, 129, 0.24);
+    --cat6-soft: rgba(0, 131, 0, 0.2);
+    --cat7-soft: rgba(144, 133, 233, 0.22);
+    --cat8-soft: rgba(230, 103, 103, 0.22);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0d1114;
+  --surface: rgba(255, 255, 255, 0.08);
+  --surface-2: rgba(255, 255, 255, 0.05);
+  --surface-3: rgba(255, 255, 255, 0.075);
+  --sheet-bg: rgba(22, 27, 31, 0.94);
+  --sheet-field-bg: rgba(29, 35, 39, 0.92);
+  --nav-bg: rgba(22, 27, 31, 0.82);
+  --fab-bg: rgba(57, 135, 229, 0.86);
+  --ink: #f4f6f7;
+  --ink-muted: #a9b3ba;
+  --ink-faint: #6e7880;
+  --accent: #3987e5;
+  --accent-ink: #0d1114;
+  --accent-soft: rgba(57, 135, 229, 0.22);
+  --good: #0ca30c;
+  --good-soft: rgba(12, 163, 12, 0.18);
+  --critical: #d03b3b;
+  --critical-soft: rgba(208, 59, 59, 0.22);
+  --border: rgba(255, 255, 255, 0.14);
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --cat1: #3987e5;
+  --cat2: #d95926;
+  --cat3: #199e70;
+  --cat4: #c98500;
+  --cat5: #d55181;
+  --cat6: #008300;
+  --cat7: #9085e9;
+  --cat8: #e66767;
+  --cat1-soft: rgba(57, 135, 229, 0.22);
+  --cat2-soft: rgba(217, 89, 38, 0.22);
+  --cat3-soft: rgba(25, 158, 112, 0.22);
+  --cat4-soft: rgba(201, 133, 0, 0.22);
+  --cat5-soft: rgba(213, 81, 129, 0.24);
+  --cat6-soft: rgba(0, 131, 0, 0.2);
+  --cat7-soft: rgba(144, 133, 233, 0.22);
+  --cat8-soft: rgba(230, 103, 103, 0.22);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: radial-gradient(circle at 16% 14%, rgba(255, 255, 255, 0.85), transparent 42%),
+    radial-gradient(circle at 84% 10%, rgba(255, 255, 255, 0.55), transparent 45%),
+    radial-gradient(circle at 22% 94%, rgba(205, 210, 217, 0.55), transparent 48%),
+    radial-gradient(circle at 90% 86%, rgba(195, 201, 209, 0.45), transparent 42%),
+    linear-gradient(160deg, #eef1f3, #dde1e6);
+  background-attachment: fixed;
+  color: var(--ink);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) body {
+    background: radial-gradient(circle at 16% 14%, rgba(255, 255, 255, 0.07), transparent 42%),
+      radial-gradient(circle at 84% 10%, rgba(255, 255, 255, 0.045), transparent 45%),
+      radial-gradient(circle at 22% 94%, rgba(255, 255, 255, 0.03), transparent 48%),
+      radial-gradient(circle at 90% 86%, rgba(0, 0, 0, 0.3), transparent 42%),
+      linear-gradient(160deg, #0d1114, #171b1f);
+    background-attachment: fixed;
+  }
+}
+
+:root[data-theme="dark"] body {
+  background: radial-gradient(circle at 16% 14%, rgba(255, 255, 255, 0.07), transparent 42%),
+    radial-gradient(circle at 84% 10%, rgba(255, 255, 255, 0.045), transparent 45%),
+    radial-gradient(circle at 22% 94%, rgba(255, 255, 255, 0.03), transparent 48%),
+    radial-gradient(circle at 90% 86%, rgba(0, 0, 0, 0.3), transparent 42%),
+    linear-gradient(160deg, #0d1114, #171b1f);
+  background-attachment: fixed;
+}
+
+/* Shared glass surface helper — apply alongside a bg-* utility */
+.glass {
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}

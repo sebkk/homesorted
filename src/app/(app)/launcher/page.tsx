@@ -1,0 +1,121 @@
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
+import { signOut } from "@/lib/actions";
+import { Zone } from "@/lib/types";
+
+const CAT_VARS = [
+  "var(--cat1)",
+  "var(--cat2)",
+  "var(--cat3)",
+  "var(--cat4)",
+  "var(--cat5)",
+  "var(--cat6)",
+  "var(--cat7)",
+  "var(--cat8)",
+];
+
+export default async function LauncherPage() {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { data: zones } = await supabase
+    .from("zones")
+    .select("*")
+    .eq("pinned", true)
+    .order("created_at", { ascending: true });
+
+  const pinnedZones = (zones as Zone[] | null) ?? [];
+  const displayName = (user?.user_metadata?.full_name as string | undefined)?.trim() || user?.email || "";
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0">
+      <div
+        className="flex-1 min-h-0 overflow-y-auto px-5"
+        style={{ paddingTop: "calc(22px + env(safe-area-inset-top, 0px))", paddingBottom: "28px" }}
+      >
+        <div className="text-[19px] font-bold mt-1 mb-0.5 tracking-tight">Cześć, {displayName}</div>
+        <div className="text-[13px] text-ink-muted mb-[18px]">Wybierz obszar, którym chcesz się zająć.</div>
+
+        {pinnedZones.length > 0 && (
+          <div className="mb-1">
+            <div className="section-title text-[13px] font-semibold text-ink-muted uppercase tracking-wider mb-2.5">
+              Przypięte
+            </div>
+            <div className="grid grid-cols-2 gap-3 mb-1">
+              {pinnedZones.map((zone) => (
+                <Link
+                  key={zone.id}
+                  href={`/finance/${zone.id}`}
+                  className="bg-surface-2 border border-border rounded-xl p-4 flex flex-col gap-2.5 text-left shadow-glass"
+                >
+                  <span
+                    className="w-[38px] h-[38px] rounded-md flex items-center justify-center shrink-0"
+                    style={{
+                      background: `color-mix(in srgb, ${CAT_VARS[(zone.color - 1) % 8]} 16%, transparent)`,
+                      color: CAT_VARS[(zone.color - 1) % 8],
+                    }}
+                  >
+                    <FinanceIcon />
+                  </span>
+                  <span className="text-[13.5px] font-bold">{zone.name}</span>
+                  <span className="text-[11.5px] text-ink-muted leading-snug">Finanse</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="section-title text-[13px] font-semibold text-ink-muted uppercase tracking-wider mt-[22px] mb-2.5">
+          Moduły
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Link
+            href="/zones"
+            className="bg-surface-2 border border-border rounded-xl p-4 flex flex-col gap-2.5 text-left shadow-glass"
+          >
+            <span className="w-[38px] h-[38px] rounded-md bg-accent-soft text-accent flex items-center justify-center shrink-0">
+              <FinanceIcon />
+            </span>
+            <span className="text-[13.5px] font-bold">Finanse</span>
+            <span className="text-[11.5px] text-ink-muted leading-snug">Zarobki, wydatki i oszczędności</span>
+          </Link>
+          <div className="bg-surface-2 border border-border rounded-xl p-4 flex flex-col gap-2.5 opacity-55">
+            <span className="w-[38px] h-[38px] rounded-md bg-surface-3 text-ink-faint flex items-center justify-center shrink-0">
+              <svg width={19} height={19} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 8L12 3 3 8v8l9 5 9-5V8Z" />
+                <path d="M3 8l9 5 9-5" />
+                <path d="M12 13v8" />
+              </svg>
+            </span>
+            <span className="text-[13.5px] font-bold">Magazyn</span>
+            <span className="text-[11.5px] text-ink-muted leading-snug">Stan zapasów w mieszkaniu</span>
+            <span className="self-start text-[9.5px] font-bold uppercase tracking-wide text-ink-faint bg-surface-3 rounded-full px-2 py-0.5">
+              Wkrótce
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <form action={signOut}>
+        <button
+          type="submit"
+          className="block flex-none w-full bg-transparent border-none border-t border-border text-ink-faint font-sans text-xs font-semibold cursor-pointer px-5 pt-3.5"
+          style={{ paddingBottom: "calc(14px + env(safe-area-inset-bottom, 0px))" }}
+        >
+          Wyloguj się
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function FinanceIcon() {
+  return (
+    <svg width={19} height={19} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 17l6-6 4 4 8-8" />
+      <path d="M15 7h6v6" />
+    </svg>
+  );
+}
