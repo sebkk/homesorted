@@ -1,11 +1,15 @@
 import {
   AnyExpense,
+  AnyIncome,
   Expense,
   Income,
   MONTHS,
   MONTHS_GENITIVE,
   RecurringExpense,
+  RecurringIncome,
+  RecurringIncomeOccurrence,
   RecurringOccurrence,
+  RecurringTemplate,
   SavingsEntry,
 } from "./types";
 
@@ -81,19 +85,16 @@ export function daysInMonth(monthKey: string): number {
   return new Date(parseInt(yStr, 10), parseInt(mStr, 10), 0).getDate();
 }
 
-/** Expands one recurring template into an occurrence for `monthKey`, honoring
- * startMonth / endMonth (forward-only cutoff) / skipMonths (one-off exception). */
-export function recurringForMonth(
-  recurring: RecurringExpense[],
-  monthKey: string
-): RecurringOccurrence[] {
+/** Whether a recurring template (expense or income) applies in `monthKey`:
+ * start_month inclusive, end_month an exclusive forward-only cutoff, and
+ * skip_months one-off exceptions. */
+export function isActiveInMonth(t: Pick<RecurringTemplate, "start_month" | "end_month" | "skip_months">, monthKey: string): boolean {
+  return t.start_month <= monthKey && (!t.end_month || monthKey < t.end_month) && !t.skip_months.includes(monthKey);
+}
+
+export function recurringForMonth(recurring: RecurringExpense[], monthKey: string): RecurringOccurrence[] {
   return recurring
-    .filter(
-      (r) =>
-        r.start_month <= monthKey &&
-        (!r.end_month || monthKey < r.end_month) &&
-        !r.skip_months.includes(monthKey)
-    )
+    .filter((r) => isActiveInMonth(r, monthKey))
     .map((r) => ({
       id: `rec_${r.id}_${monthKey}`,
       // Clamp to the month's last day — e.g. a day-31 template still fires in February.
@@ -105,6 +106,22 @@ export function recurringForMonth(
       recurring: true as const,
       templateId: r.id,
       month: monthKey,
+    }));
+}
+
+export function recurringIncomesForMonth(recurring: RecurringIncome[], monthKey: string): RecurringIncomeOccurrence[] {
+  return recurring
+    .filter((r) => isActiveInMonth(r, monthKey))
+    .map((r) => ({
+      id: `reci_${r.id}_${monthKey}`,
+      month: monthKey,
+      type: r.type,
+      hours: r.hours,
+      amount: r.amount,
+      desc: r.desc,
+      icon: r.icon,
+      recurring: true as const,
+      templateId: r.id,
     }));
 }
 
@@ -127,33 +144,33 @@ export function monthExpenseTotal(
   return expensesForMonth(expenses, recurring, monthKey).reduce((s, x) => s + x.amount, 0);
 }
 
-export function incomesForMonth(incomes: Income[], monthKey: string): Income[] {
-  return incomes.filter((x) => x.month === monthKey);
+export function incomesForMonth(incomes: Income[], recurring: RecurringIncome[], monthKey: string): AnyIncome[] {
+  return [...incomes.filter((x) => x.month === monthKey), ...recurringIncomesForMonth(recurring, monthKey)];
 }
 
-export function monthIncomeTotal(incomes: Income[], monthKey: string): number {
-  return incomesForMonth(incomes, monthKey).reduce((s, x) => s + x.amount, 0);
+export function monthIncomeTotal(incomes: Income[], recurring: RecurringIncome[], monthKey: string): number {
+  return incomesForMonth(incomes, recurring, monthKey).reduce((s, x) => s + x.amount, 0);
 }
 
-export function monthZlH(incomes: Income[], monthKey: string): number {
-  const items = incomesForMonth(incomes, monthKey);
+export function monthZlH(incomes: Income[], recurring: RecurringIncome[], monthKey: string): number {
+  const items = incomesForMonth(incomes, recurring, monthKey);
   const hours = items.reduce((s, x) => s + (x.hours || 0), 0);
   const amount = items.reduce((s, x) => s + (x.hours ? x.amount : 0), 0);
   return hours > 0 ? amount / hours : 0;
 }
 
-/** All months that have any activity, sorted ascending, including future
- * months a still-active recurring template would touch up to `currentMonth`. */
+/** All months that have any activity, sorted ascending, including every month
+ * from a recurring template's start (expense or income) up to `currentMonth`. */
 export function allMonthsSorted(
   incomes: Income[],
   expenses: Expense[],
-  recurring: RecurringExpense[],
+  templates: Pick<RecurringTemplate, "start_month">[],
   currentMonth: string
 ): string[] {
   const set = new Set<string>();
   incomes.forEach((x) => set.add(x.month));
   expenses.forEach((x) => set.add(x.date.slice(0, 7)));
-  recurring.forEach((r) => {
+  templates.forEach((r) => {
     let m = r.start_month;
     let guard = 0;
     while (m <= currentMonth && guard < 240) {

@@ -14,12 +14,15 @@ export async function updateSession(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
+        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[], headers: Record<string, string>) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
           supabaseResponse = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
           );
+          // Cache-control headers from @supabase/ssr: a response carrying a
+          // refreshed session cookie must never be cached and served to someone else.
+          Object.entries(headers ?? {}).forEach(([key, value]) => supabaseResponse.headers.set(key, value));
         },
       },
     }

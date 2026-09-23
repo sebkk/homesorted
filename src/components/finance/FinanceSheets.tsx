@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useZoneData } from "@/lib/useZoneData";
 import { useCategories } from "@/lib/useCategories";
 import { daysInMonth, fmt, monthLabel, monthLabelGenitive, nextMonth, prevMonth, todayStr } from "@/lib/finance";
 import { standardWorkHours, workingDaysInMonth } from "@/lib/polishHolidays";
-import { Expense, Income, IncomeType, INCOME_TYPE_ICONS, INCOME_TYPE_LABELS, RecurringExpense, SavingsEntry } from "@/lib/types";
+import { Expense, Income, IncomeType, INCOME_TYPE_ICONS, INCOME_TYPE_LABELS, RecurringExpense, RecurringIncome, SavingsEntry } from "@/lib/types";
 import { Sheet, SheetHeader, Field } from "@/components/ui/Sheet";
 import { useToast } from "@/components/ui/Toast";
 
@@ -15,14 +15,150 @@ export type SheetState =
   | { type: "expense" }
   | { type: "editExpense"; expense: Expense }
   | { type: "editRecurring"; recurring: RecurringExpense }
+  | { type: "editRecurringIncome"; recurring: RecurringIncome }
   | { type: "savings" }
   | { type: "editSavings"; entry: SavingsEntry }
   | { type: "editInitial" }
-  | { type: "recurringMenu"; templateId: string; month: string }
+  | { type: "budgets" }
+  | { type: "recurringMenu"; kind: "expense" | "income"; templateId: string; month: string }
   | null;
 
 const inputClass =
   "text-[14.5px] font-medium text-ink bg-sheet-field-bg border border-border rounded-md px-3 py-2.5 outline-none focus:border-accent tabular-nums";
+
+type SaveResult = { message: string } | null | undefined;
+
+// Guards against double-submits (a slow response used to invite repeat taps,
+// creating duplicate rows) and surfaces save failures instead of silently
+// leaving the sheet open.
+function useSaver(onClose: () => void) {
+  const { showToast } = useToast();
+  const [busy, setBusy] = useState(false);
+
+  async function save(action: () => Promise<SaveResult>, successMessage: string) {
+    if (busy) return;
+    setBusy(true);
+    let error: SaveResult;
+    try {
+      error = await action();
+    } catch (e) {
+      error = { message: e instanceof Error ? e.message : "brak połączenia" };
+    }
+    setBusy(false);
+    if (error) {
+      showToast(`Nie udało się zapisać: ${error.message}`);
+      return;
+    }
+    onClose();
+    showToast(successMessage);
+  }
+
+  return { busy, save };
+}
+
+function SaveButton({ busy, onClick, label }: { busy: boolean; onClick: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      className="font-bold text-[14.5px] text-accent-ink bg-accent rounded-md py-3 mb-1 disabled:opacity-60"
+    >
+      {busy ? "Zapisywanie…" : label}
+    </button>
+  );
+}
+
+// Start/end month of a recurring template. `endMonth` is the last *inclusive*
+// month shown to the user; the DB stores the exclusive cutoff (month after).
+function useMonthRange(initialStart: string, storedEnd: string | null) {
+  const [startMonth, setStartMonth] = useState(initialStart);
+  const [endMonth, setEndMonth] = useState(storedEnd ? prevMonth(storedEnd) : "");
+  return {
+    startMonth,
+    endMonth,
+    changeStart(v: string) {
+      setStartMonth(v);
+      if (endMonth && endMonth < v) setEndMonth(v);
+    },
+    changeEnd(v: string) {
+      setEndMonth(v && v < startMonth ? startMonth : v);
+    },
+    clearEnd() {
+      setEndMonth("");
+    },
+    storedEnd: endMonth ? nextMonth(endMonth) : null,
+  };
+}
+
+function MonthRangeFields({
+  range,
+  idPrefix,
+  noun,
+  currentMonth,
+  onStartChange,
+}: {
+  range: ReturnType<typeof useMonthRange>;
+  idPrefix: string;
+  noun: string;
+  currentMonth: string;
+  onStartChange?: (value: string) => void;
+}) {
+  const { startMonth, endMonth } = range;
+  return (
+    <>
+      <Field
+        label="Obowiązuje od"
+        htmlFor={`${idPrefix}StartMonth`}
+        hint={
+          startMonth < currentMonth
+            ? `Doliczy się też do wcześniejszych miesięcy, od ${monthLabelGenitive(startMonth)}.`
+            : `${noun} zacznie obowiązywać od ${monthLabelGenitive(startMonth)}.`
+        }
+      >
+        <input
+          id={`${idPrefix}StartMonth`}
+          type="month"
+          value={startMonth}
+          onChange={(e) => {
+            range.changeStart(e.target.value);
+            onStartChange?.(e.target.value);
+          }}
+          className={inputClass}
+        />
+      </Field>
+      <Field
+        label="Do (opcjonalnie)"
+        htmlFor={`${idPrefix}EndMonth`}
+        hint={
+          endMonth
+            ? `Ostatni miesiąc: ${monthLabel(endMonth)}. Od ${monthLabelGenitive(nextMonth(endMonth))} już się nie doliczy.`
+            : "Zostaw puste, żeby obowiązywał bezterminowo."
+        }
+      >
+        <div className="flex flex-row gap-2 items-center">
+          <input
+            id={`${idPrefix}EndMonth`}
+            type="month"
+            min={startMonth}
+            value={endMonth}
+            onChange={(e) => range.changeEnd(e.target.value)}
+            className={inputClass + " flex-1"}
+          />
+          {endMonth && (
+            <button
+              type="button"
+              onClick={range.clearEnd}
+              className="text-[12.5px] font-semibold text-ink-muted bg-surface-2 rounded-md px-3 py-2.5 whitespace-nowrap"
+            >
+              Usuń
+            </button>
+          )}
+        </div>
+      </Field>
+    </>
+  );
+}
 
 export function FinanceSheets({
   zd,
@@ -48,11 +184,15 @@ export function FinanceSheets({
       {sheet?.type === "editRecurring" && (
         <ExpenseForm zd={zd} currentMonth={currentMonth} onClose={onClose} editingRecurring={sheet.recurring} />
       )}
+      {sheet?.type === "editRecurringIncome" && (
+        <IncomeForm zd={zd} currentMonth={currentMonth} onClose={onClose} editingRecurring={sheet.recurring} />
+      )}
       {sheet?.type === "savings" && <SavingsForm zd={zd} onClose={onClose} />}
       {sheet?.type === "editSavings" && <SavingsForm zd={zd} onClose={onClose} editing={sheet.entry} />}
       {sheet?.type === "editInitial" && <EditInitialForm zd={zd} onClose={onClose} />}
+      {sheet?.type === "budgets" && <BudgetsForm zd={zd} onClose={onClose} />}
       {sheet?.type === "recurringMenu" && (
-        <RecurringMenu zd={zd} templateId={sheet.templateId} month={sheet.month} onClose={onClose} />
+        <RecurringMenu zd={zd} kind={sheet.kind} templateId={sheet.templateId} month={sheet.month} onClose={onClose} />
       )}
     </Sheet>
   );
@@ -64,60 +204,54 @@ function IncomeForm({
   currentMonth,
   onClose,
   editing,
+  editingRecurring,
 }: {
   zd: ReturnType<typeof useZoneData>;
   currentMonth: string;
   onClose: () => void;
   editing?: Income;
+  editingRecurring?: RecurringIncome;
 }) {
-  const { showToast } = useToast();
-  const [type, setType] = useState<IncomeType>(editing?.type ?? "b2b");
+  const { busy, save } = useSaver(onClose);
+  const source = editing ?? editingRecurring;
+  const isEdit = !!source;
+  const [type, setType] = useState<IncomeType>(source?.type ?? "b2b");
   const [month, setMonth] = useState(editing?.month ?? currentMonth);
-  const [hours, setHours] = useState(editing ? String(editing.hours) : "");
-  const [amount, setAmount] = useState(editing ? String(editing.amount) : "");
-  const [desc, setDesc] = useState(editing?.desc ?? "");
+  const [hours, setHours] = useState(source ? String(source.hours) : "");
+  const [amount, setAmount] = useState(source ? String(source.amount) : "");
+  const [desc, setDesc] = useState(source?.desc ?? "");
   const [applyVat, setApplyVat] = useState(false);
-  const [icon, setIcon] = useState(editing?.icon ?? "");
+  const [icon, setIcon] = useState(source?.icon ?? "");
+  const [isRecurring, setIsRecurring] = useState(!!editingRecurring);
+  const range = useMonthRange(editingRecurring?.start_month ?? currentMonth, editingRecurring?.end_month ?? null);
+  const hoursMonth = isRecurring ? range.startMonth : month;
 
   const baseAmount = parseFloat(amount) || 0;
-  const finalAmount = !editing && type === "b2b" && applyVat ? baseAmount * 1.23 : baseAmount;
+  // VAT is only offered when adding: an existing row stores just the final amount.
+  const finalAmount = !isEdit && type === "b2b" && applyVat ? baseAmount * 1.23 : baseAmount;
 
-  async function handleSave() {
+  function handleSave() {
     if (baseAmount <= 0) return;
+    const fields = { type, hours: parseFloat(hours) || 0, desc: desc.trim(), icon: icon.trim() || null, amount: finalAmount };
+    const templateFields = { ...fields, start_month: range.startMonth, end_month: range.storedEnd };
 
     if (editing) {
-      const error = await zd.updateIncome(editing.id, {
-        month,
-        type,
-        hours: parseFloat(hours) || 0,
-        amount: baseAmount,
-        desc: desc.trim(),
-        icon: icon.trim() || null,
-      });
-      if (!error) {
-        onClose();
-        showToast("Zapisano zmiany");
-      }
-      return;
-    }
-
-    const error = await zd.addIncome({
-      month,
-      type,
-      hours: parseFloat(hours) || 0,
-      amount: finalAmount,
-      desc: desc.trim(),
-      icon: icon.trim() || null,
-    });
-    if (!error) {
-      onClose();
-      showToast("Dodano zarobek");
+      save(() => zd.updateIncome(editing.id, { ...fields, month }), "Zapisano zmiany");
+    } else if (editingRecurring) {
+      save(() => zd.recurringIncomeOps.update(editingRecurring.id, templateFields), "Zapisano zmiany");
+    } else if (isRecurring) {
+      save(() => zd.recurringIncomeOps.add(templateFields), "Dodano zarobek stały");
+    } else {
+      save(() => zd.addIncome({ ...fields, month }), "Dodano zarobek");
     }
   }
 
   return (
     <>
-      <SheetHeader title={editing ? "Edytuj zarobek" : "Nowy zarobek"} onClose={onClose} />
+      <SheetHeader
+        title={editing ? "Edytuj zarobek" : editingRecurring ? "Edytuj zarobek stały" : "Nowy zarobek"}
+        onClose={onClose}
+      />
       <Field label="Typ przychodu" htmlFor="incType">
         <select id="incType" value={type} onChange={(e) => setType(e.target.value as IncomeType)} className={inputClass}>
           {(Object.keys(INCOME_TYPE_LABELS) as IncomeType[]).map((t) => (
@@ -127,29 +261,43 @@ function IncomeForm({
           ))}
         </select>
       </Field>
-      <Field label="Miesiąc" htmlFor="incMonth">
-        <input id="incMonth" type="month" value={month} onChange={(e) => setMonth(e.target.value)} className={inputClass} />
-      </Field>
+      {!isEdit && (
+        <label className="flex flex-row items-center gap-2.5" htmlFor="incRecurring">
+          <input id="incRecurring" type="checkbox" checked={isRecurring} onChange={(e) => setIsRecurring(e.target.checked)} className="w-[17px] h-[17px] accent-accent shrink-0" />
+          <span className="text-[13px]">To zarobek stały (co miesiąc)</span>
+        </label>
+      )}
+      {isRecurring ? (
+        <MonthRangeFields range={range} idPrefix="inc" noun="Zarobek stały" currentMonth={currentMonth} />
+      ) : (
+        <Field label="Miesiąc" htmlFor="incMonth">
+          <input id="incMonth" type="month" value={month} onChange={(e) => setMonth(e.target.value)} className={inputClass} />
+        </Field>
+      )}
       {type === "b2b" && (
-        <Field label="Godziny (opcjonalnie)" htmlFor="incHours" hint="Do wyliczenia stawki zł/h na czysto.">
+        <Field
+          label="Godziny (opcjonalnie)"
+          htmlFor="incHours"
+          hint={isRecurring ? "Do wyliczenia stawki zł/h — ta sama liczba godzin w każdym miesiącu." : "Do wyliczenia stawki zł/h na czysto."}
+        >
           <div className="flex flex-row gap-2 items-center">
             <input id="incHours" type="number" min={0} step={1} value={hours} onChange={(e) => setHours(e.target.value)} className={inputClass + " flex-1"} placeholder="0" />
             <button
               type="button"
-              onClick={() => setHours(String(standardWorkHours(month)))}
+              onClick={() => setHours(String(standardWorkHours(hoursMonth)))}
               className="text-[12.5px] font-semibold text-accent bg-accent-soft rounded-md px-3 py-2.5 whitespace-nowrap"
             >
               Z dni roboczych
             </button>
           </div>
           <div className="text-[11.5px] text-ink-muted mt-1">
-            {monthLabel(month)}: {workingDaysInMonth(month)} dni robocze (bez weekendów i świąt) × 8h = {standardWorkHours(month)} h
+            {monthLabel(hoursMonth)}: {workingDaysInMonth(hoursMonth)} dni robocze (bez weekendów i świąt) × 8h = {standardWorkHours(hoursMonth)} h
           </div>
         </Field>
       )}
-      {type !== "b2b" && (
+      {(type !== "b2b" || isRecurring) && (
         <Field label="Opis (opcjonalnie)" htmlFor="incDesc">
-          <input id="incDesc" type="text" value={desc} onChange={(e) => setDesc(e.target.value)} className={inputClass} placeholder="np. prezent od klienta" />
+          <input id="incDesc" type="text" value={desc} onChange={(e) => setDesc(e.target.value)} className={inputClass} placeholder={isRecurring ? "np. pensja, klient X" : "np. prezent od klienta"} />
         </Field>
       )}
       <Field label="Kwota netto" htmlFor="incAmount">
@@ -166,18 +314,16 @@ function IncomeForm({
           className={inputClass + " text-[18px] text-center w-16"}
         />
       </Field>
-      {!editing && type === "b2b" && (
+      {!isEdit && type === "b2b" && (
         <label className="flex flex-row items-center gap-2.5" htmlFor="incVat">
           <input id="incVat" type="checkbox" checked={applyVat} onChange={(e) => setApplyVat(e.target.checked)} className="w-[17px] h-[17px] accent-accent shrink-0" />
           <span className="text-[13px]">Doliczyć VAT 23%</span>
         </label>
       )}
-      {!editing && type === "b2b" && applyVat && baseAmount > 0 && (
+      {!isEdit && type === "b2b" && applyVat && baseAmount > 0 && (
         <div className="text-[12px] text-ink-muted">Kwota brutto: {fmt(finalAmount)}</div>
       )}
-      <button type="button" onClick={handleSave} className="font-bold text-[14.5px] text-accent-ink bg-accent rounded-md py-3 mb-1">
-        {editing ? "Zapisz zmiany" : "Zapisz"}
-      </button>
+      <SaveButton busy={busy} onClick={handleSave} label={isEdit ? "Zapisz zmiany" : "Zapisz"} />
     </>
   );
 }
@@ -196,12 +342,11 @@ function ExpenseForm({
   editingExpense?: Expense;
   editingRecurring?: RecurringExpense;
 }) {
-  const { showToast } = useToast();
+  const { busy, save } = useSaver(onClose);
   const categories = useCategories();
-  const [category, setCategory] = useState<string>(editingExpense?.category ?? editingRecurring?.category ?? "");
-  useEffect(() => {
-    if (!category && categories.length > 0) setCategory(categories[0].name);
-  }, [categories, category]);
+  const [pickedCategory, setCategory] = useState<string>(editingExpense?.category ?? editingRecurring?.category ?? "");
+  // Until the user picks one, default to the first category once the list loads.
+  const category = pickedCategory || categories[0]?.name || "";
   const [desc, setDesc] = useState(editingExpense?.desc ?? editingRecurring?.desc ?? "");
   const [amount, setAmount] = useState(
     editingExpense ? String(editingExpense.amount) : editingRecurring ? String(editingRecurring.amount) : ""
@@ -210,78 +355,33 @@ function ExpenseForm({
   const [icon, setIcon] = useState(editingExpense?.icon ?? editingRecurring?.icon ?? "");
   const [isRecurring, setIsRecurring] = useState(!!editingRecurring);
   const [dayOfMonth, setDayOfMonth] = useState(editingRecurring ? String(editingRecurring.day_of_month) : "1");
-  const [startMonth, setStartMonth] = useState(editingRecurring?.start_month ?? currentMonth);
-  const [endMonth, setEndMonth] = useState(editingRecurring?.end_month ? prevMonth(editingRecurring.end_month) : ""); // last active month, inclusive; "" = no end
-  const maxDay = daysInMonth(startMonth);
+  const range = useMonthRange(editingRecurring?.start_month ?? currentMonth, editingRecurring?.end_month ?? null);
+  const maxDay = daysInMonth(range.startMonth);
   const selectedCategoryIcon = categories.find((c) => c.name === category)?.icon ?? "📦";
 
-  function handleStartMonthChange(value: string) {
-    setStartMonth(value);
-    if (parseInt(dayOfMonth, 10) > daysInMonth(value)) setDayOfMonth(String(daysInMonth(value)));
-    if (endMonth && endMonth < value) setEndMonth(value);
+  function clampDayTo(month: string) {
+    if (parseInt(dayOfMonth, 10) > daysInMonth(month)) setDayOfMonth(String(daysInMonth(month)));
   }
 
-  function handleEndMonthChange(value: string) {
-    setEndMonth(value && value < startMonth ? startMonth : value);
-  }
-
-  async function handleSave() {
+  function handleSave() {
     const value = parseFloat(amount) || 0;
     if (value <= 0) return;
+    const common = { category, desc: desc.trim(), amount: value, icon: icon.trim() || null };
+    const recurringFields = {
+      ...common,
+      day_of_month: parseInt(dayOfMonth, 10) || 1,
+      start_month: range.startMonth,
+      end_month: range.storedEnd,
+    };
 
     if (editingExpense) {
-      const error = await zd.updateExpense(editingExpense.id, {
-        date,
-        category,
-        desc: desc.trim(),
-        amount: value,
-        icon: icon.trim() || null,
-      });
-      if (!error) {
-        onClose();
-        showToast("Zapisano zmiany");
-      }
-      return;
-    }
-
-    if (editingRecurring) {
-      const error = await zd.updateRecurring(editingRecurring.id, {
-        category,
-        desc: desc.trim(),
-        amount: value,
-        day_of_month: parseInt(dayOfMonth, 10) || 1,
-        start_month: startMonth,
-        end_month: endMonth ? nextMonth(endMonth) : null,
-        icon: icon.trim() || null,
-      });
-      if (!error) {
-        onClose();
-        showToast("Zapisano zmiany");
-      }
-      return;
-    }
-
-    if (isRecurring) {
-      const error = await zd.addRecurring({
-        category,
-        desc: desc.trim(),
-        amount: value,
-        day_of_month: parseInt(dayOfMonth, 10) || 1,
-        start_month: startMonth,
-        end_month: endMonth ? nextMonth(endMonth) : null,
-        icon: icon.trim() || null,
-      });
-      if (!error) {
-        onClose();
-        showToast("Dodano wydatek stały");
-      }
-      return;
-    }
-
-    const error = await zd.addExpense({ date, category, desc: desc.trim(), amount: value, icon: icon.trim() || null });
-    if (!error) {
-      onClose();
-      showToast("Dodano wydatek");
+      save(() => zd.updateExpense(editingExpense.id, { ...common, date }), "Zapisano zmiany");
+    } else if (editingRecurring) {
+      save(() => zd.recurringExpenseOps.update(editingRecurring.id, recurringFields), "Zapisano zmiany");
+    } else if (isRecurring) {
+      save(() => zd.recurringExpenseOps.add(recurringFields), "Dodano wydatek stały");
+    } else {
+      save(() => zd.addExpense({ ...common, date }), "Dodano wydatek");
     }
   }
 
@@ -344,52 +444,7 @@ function ExpenseForm({
               ))}
             </select>
           </Field>
-          <Field
-            label="Obowiązuje od"
-            htmlFor="expStartMonth"
-            hint={
-              startMonth < currentMonth
-                ? `Doliczy się też do wcześniejszych miesięcy, od ${monthLabelGenitive(startMonth)}.`
-                : `Wydatek stały zacznie obowiązywać od ${monthLabelGenitive(startMonth)}.`
-            }
-          >
-            <input
-              id="expStartMonth"
-              type="month"
-              value={startMonth}
-              onChange={(e) => handleStartMonthChange(e.target.value)}
-              className={inputClass}
-            />
-          </Field>
-          <Field
-            label="Do (opcjonalnie)"
-            htmlFor="expEndMonth"
-            hint={
-              endMonth
-                ? `Ostatni miesiąc: ${monthLabel(endMonth)}. Od ${monthLabelGenitive(nextMonth(endMonth))} wydatek już się nie doliczy.`
-                : "Zostaw puste, żeby wydatek trwał bezterminowo."
-            }
-          >
-            <div className="flex flex-row gap-2 items-center">
-              <input
-                id="expEndMonth"
-                type="month"
-                min={startMonth}
-                value={endMonth}
-                onChange={(e) => handleEndMonthChange(e.target.value)}
-                className={inputClass + " flex-1"}
-              />
-              {endMonth && (
-                <button
-                  type="button"
-                  onClick={() => setEndMonth("")}
-                  className="text-[12.5px] font-semibold text-ink-muted bg-surface-2 rounded-md px-3 py-2.5 whitespace-nowrap"
-                >
-                  Usuń
-                </button>
-              )}
-            </div>
-          </Field>
+          <MonthRangeFields range={range} idPrefix="exp" noun="Wydatek stały" currentMonth={currentMonth} onStartChange={clampDayTo} />
         </>
       ) : (
         <Field label="Data" htmlFor="expDate">
@@ -397,9 +452,7 @@ function ExpenseForm({
         </Field>
       )}
 
-      <button type="button" onClick={handleSave} className="font-bold text-[14.5px] text-accent-ink bg-accent rounded-md py-3 mb-1">
-        {editingExpense || editingRecurring ? "Zapisz zmiany" : "Zapisz"}
-      </button>
+      <SaveButton busy={busy} onClick={handleSave} label={editingExpense || editingRecurring ? "Zapisz zmiany" : "Zapisz"} />
     </>
   );
 }
@@ -414,30 +467,20 @@ function SavingsForm({
   onClose: () => void;
   editing?: SavingsEntry;
 }) {
-  const { showToast } = useToast();
+  const { busy, save } = useSaver(onClose);
   const [date, setDate] = useState(editing?.date ?? todayStr());
   const [desc, setDesc] = useState(editing?.desc ?? "");
   const [amount, setAmount] = useState(editing ? String(Math.abs(editing.amount)) : "");
   const [withdraw, setWithdraw] = useState(editing ? editing.amount < 0 : false);
 
-  async function handleSave() {
+  function handleSave() {
     const value = parseFloat(amount) || 0;
     if (value <= 0) return;
-    const signedAmount = withdraw ? -value : value;
-
+    const fields = { date, desc: desc.trim(), amount: withdraw ? -value : value };
     if (editing) {
-      const error = await zd.updateSavingsEntry(editing.id, { date, desc: desc.trim(), amount: signedAmount });
-      if (!error) {
-        onClose();
-        showToast("Zapisano zmiany");
-      }
-      return;
-    }
-
-    const error = await zd.addSavingsEntry({ date, desc: desc.trim(), amount: signedAmount });
-    if (!error) {
-      onClose();
-      showToast("Zapisano");
+      save(() => zd.updateSavingsEntry(editing.id, fields), "Zapisano zmiany");
+    } else {
+      save(() => zd.addSavingsEntry(fields), "Zapisano");
     }
   }
 
@@ -457,21 +500,17 @@ function SavingsForm({
         <input id="savWithdraw" type="checkbox" checked={withdraw} onChange={(e) => setWithdraw(e.target.checked)} className="w-[17px] h-[17px] accent-accent shrink-0" />
         <span className="text-[13px]">To wypłata (odejmij od oszczędności)</span>
       </label>
-      <button type="button" onClick={handleSave} className="font-bold text-[14.5px] text-accent-ink bg-accent rounded-md py-3 mb-1">
-        {editing ? "Zapisz zmiany" : "Zapisz"}
-      </button>
+      <SaveButton busy={busy} onClick={handleSave} label={editing ? "Zapisz zmiany" : "Zapisz"} />
     </>
   );
 }
 
 function EditInitialForm({ zd, onClose }: { zd: ReturnType<typeof useZoneData>; onClose: () => void }) {
-  const { showToast } = useToast();
+  const { busy, save } = useSaver(onClose);
   const [value, setValue] = useState(String(zd.savingsInitial || 0));
 
-  async function handleSave() {
-    await zd.setSavingsInitial(parseFloat(value) || 0);
-    onClose();
-    showToast("Zapisano stan początkowy");
+  function handleSave() {
+    save(() => zd.setSavingsInitial(parseFloat(value) || 0), "Zapisano stan początkowy");
   }
 
   return (
@@ -480,9 +519,52 @@ function EditInitialForm({ zd, onClose }: { zd: ReturnType<typeof useZoneData>; 
       <Field label="Stan początkowy" htmlFor="initialAmount" hint="Kwota, od której zaczynasz liczyć oszczędności w tej aplikacji.">
         <input id="initialAmount" type="number" min={0} step={0.01} value={value} onChange={(e) => setValue(e.target.value)} className={inputClass} />
       </Field>
-      <button type="button" onClick={handleSave} className="font-bold text-[14.5px] text-accent-ink bg-accent rounded-md py-3 mb-1">
-        Zapisz
-      </button>
+      <SaveButton busy={busy} onClick={handleSave} label="Zapisz" />
+    </>
+  );
+}
+
+// ---------- monthly budgets ----------
+function BudgetsForm({ zd, onClose }: { zd: ReturnType<typeof useZoneData>; onClose: () => void }) {
+  const { busy, save } = useSaver(onClose);
+  const categories = useCategories();
+  const [values, setValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(zd.budgets.map((b) => [b.category, String(b.amount)]))
+  );
+
+  function handleSave() {
+    const limits = Object.fromEntries(
+      Object.entries(values).map(([category, raw]) => [category, parseFloat(raw) || 0])
+    );
+    save(() => zd.saveBudgets(limits), "Zapisano budżety");
+  }
+
+  return (
+    <>
+      <SheetHeader title="Miesięczne budżety" onClose={onClose} />
+      <div className="text-[12.5px] text-ink-muted -mt-1">
+        Limit na kategorię, obowiązuje w każdym miesiącu. Zostaw puste, żeby nie śledzić kategorii.
+      </div>
+      <div className="flex flex-col gap-2">
+        {categories.map((c) => (
+          <label key={c.name} htmlFor={`budget-${c.name}`} className="flex items-center gap-2.5">
+            <span className="text-[17px] w-6 text-center shrink-0">{c.icon}</span>
+            <span className="flex-1 text-[13px] font-medium truncate">{c.name}</span>
+            <input
+              id={`budget-${c.name}`}
+              type="number"
+              min={0}
+              step={1}
+              inputMode="decimal"
+              value={values[c.name] ?? ""}
+              onChange={(e) => setValues((prev) => ({ ...prev, [c.name]: e.target.value }))}
+              placeholder="brak"
+              className={inputClass + " w-28 text-right py-2"}
+            />
+          </label>
+        ))}
+      </div>
+      <SaveButton busy={busy} onClick={handleSave} label="Zapisz budżety" />
     </>
   );
 }
@@ -490,44 +572,59 @@ function EditInitialForm({ zd, onClose }: { zd: ReturnType<typeof useZoneData>; 
 // ---------- recurring skip / disable menu ----------
 function RecurringMenu({
   zd,
+  kind,
   templateId,
   month,
   onClose,
 }: {
   zd: ReturnType<typeof useZoneData>;
+  kind: "expense" | "income";
   templateId: string;
   month: string;
   onClose: () => void;
 }) {
   const { showToast } = useToast();
-  const tpl = zd.recurring.find((r) => r.id === templateId);
+  const ops = kind === "income" ? zd.recurringIncomeOps : zd.recurringExpenseOps;
+  const expenseTpl = kind === "expense" ? zd.recurring.find((r) => r.id === templateId) : undefined;
+  const incomeTpl = kind === "income" ? zd.recurringIncomes.find((r) => r.id === templateId) : undefined;
+  const tpl = expenseTpl ?? incomeTpl;
   if (!tpl) return null;
 
+  const label = expenseTpl ? expenseTpl.desc || expenseTpl.category : incomeTpl!.desc || INCOME_TYPE_LABELS[incomeTpl!.type];
+  const noun = kind === "income" ? "Zarobek stały" : "Wydatek stały";
+  const deletesWhole = month <= tpl.start_month;
+
   async function handleSkip() {
-    await zd.skipRecurringMonth(templateId, month);
+    await ops.skip(templateId, month);
     onClose();
-    showToast(`Pominięto w miesiącu ${monthLabel(month)}`, () => zd.undoSkipRecurringMonth(templateId, month));
+    showToast(`Pominięto w miesiącu ${monthLabel(month)}`, () => ops.undoSkip(templateId, month));
   }
 
   async function handleDisable() {
-    const prevEnd = await zd.disableRecurringFrom(templateId, month);
+    const result = await ops.disableFrom(templateId, month);
     onClose();
-    showToast(`Wyłączono od ${monthLabel(month)} — wcześniejsze miesiące bez zmian`, () =>
-      zd.restoreRecurringEnd(templateId, prevEnd ?? null)
+    if (!result) return;
+    showToast(
+      result.deleted
+        ? `Usunięto: ${label}`
+        : `Wyłączono od ${monthLabelGenitive(month)} — wcześniejsze miesiące bez zmian`,
+      result.undo
     );
   }
 
   return (
     <>
-      <SheetHeader title={tpl.desc || tpl.category} onClose={onClose} />
+      <SheetHeader title={label} onClose={onClose} />
       <div className="text-[12.5px] text-ink-muted">
-        Wydatek stały — {fmt(tpl.amount)} co miesiąc. Wybierz, co zrobić z {monthLabel(month)}.
+        {noun} — {fmt(tpl.amount)} co miesiąc. Wybierz, co zrobić z {monthLabel(month)}.
       </div>
       <button type="button" onClick={handleSkip} className="font-semibold text-[13px] text-accent bg-accent-soft border-none rounded-md py-2.5">
         Pomiń tylko {monthLabel(month)}
       </button>
       <button type="button" onClick={handleDisable} className="font-semibold text-[13px] text-critical bg-critical-soft border-none rounded-md py-2.5 mb-1">
-        Wyłącz od {monthLabel(month)} (wcześniejsze miesiące zostają)
+        {deletesWhole
+          ? `Usuń całkowicie (zaczynał się w ${monthLabel(month)})`
+          : `Wyłącz od ${monthLabelGenitive(month)} (wcześniejsze miesiące zostają)`}
       </button>
     </>
   );

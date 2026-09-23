@@ -43,10 +43,7 @@ export function useCategories(): Category[] {
   const [categories, setCategories] = useState<Category[]>(cache ?? []);
 
   useEffect(() => {
-    if (cache) {
-      setCategories(cache);
-      return;
-    }
+    if (cache) return; // already seeded synchronously via useState's initializer
     let cancelled = false;
     fetchCategories().then((data) => {
       if (!cancelled) setCategories(data);

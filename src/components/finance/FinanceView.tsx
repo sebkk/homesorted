@@ -52,14 +52,21 @@ export function FinanceView({ zoneId, zoneName }: { zoneId: string; zoneName: st
             currentMonth={currentMonth}
             onAddIncome={() => setSheet({ type: "income" })}
             onAddExpense={() => setSheet({ type: "expense" })}
+            onEditBudgets={() => setSheet({ type: "budgets" })}
           />
         ) : tab === "incomes" ? (
-          <IncomesTab zd={zd} onEditIncome={(income) => setSheet({ type: "editIncome", income })} />
+          <IncomesTab
+            zd={zd}
+            currentMonth={currentMonth}
+            onEditIncome={(income) => setSheet({ type: "editIncome", income })}
+            onEditRecurring={(recurring) => setSheet({ type: "editRecurringIncome", recurring })}
+            onOpenRecurringMenu={(templateId, month) => setSheet({ type: "recurringMenu", kind: "income", templateId, month })}
+          />
         ) : tab === "expenses" ? (
           <ExpensesTab
             zd={zd}
             currentMonth={currentMonth}
-            onOpenRecurringMenu={(templateId, month) => setSheet({ type: "recurringMenu", templateId, month })}
+            onOpenRecurringMenu={(templateId, month) => setSheet({ type: "recurringMenu", kind: "expense", templateId, month })}
             onEditExpense={(expense) => setSheet({ type: "editExpense", expense })}
             onEditRecurring={(recurring) => setSheet({ type: "editRecurring", recurring })}
           />

@@ -86,6 +86,23 @@ create table if not exists public.recurring_expenses (
   created_at timestamptz not null default now()
 );
 
+-- ---------- recurring income templates ----------
+-- Same semantics as recurring_expenses: end_month is an exclusive, forward-only
+-- cutoff; skip_months are one-off exceptions.
+create table if not exists public.recurring_incomes (
+  id uuid primary key default gen_random_uuid(),
+  zone_id uuid not null references public.zones(id) on delete cascade,
+  type text not null default 'b2b' check (type in ('b2b','uop','uz','uod','inne')),
+  hours numeric not null default 0,
+  amount numeric not null default 0,
+  "desc" text not null default '',
+  icon text,
+  start_month text not null,
+  end_month text,
+  skip_months text[] not null default '{}',
+  created_at timestamptz not null default now()
+);
+
 -- ---------- savings ----------
 create table if not exists public.savings_state (
   zone_id uuid primary key references public.zones(id) on delete cascade,
@@ -101,11 +118,22 @@ create table if not exists public.savings_entries (
   created_at timestamptz not null default now()
 );
 
+-- ---------- monthly budgets ----------
+-- One monthly limit per category per zone; applies to every month.
+create table if not exists public.category_budgets (
+  zone_id uuid not null references public.zones(id) on delete cascade,
+  category text not null,
+  amount numeric not null check (amount > 0),
+  created_at timestamptz not null default now(),
+  primary key (zone_id, category)
+);
+
 -- ---------- indexes ----------
 create index if not exists idx_zones_user on public.zones(user_id);
 create index if not exists idx_incomes_zone on public.incomes(zone_id);
 create index if not exists idx_expenses_zone on public.expenses(zone_id);
 create index if not exists idx_recurring_zone on public.recurring_expenses(zone_id);
+create index if not exists idx_recurring_incomes_zone on public.recurring_incomes(zone_id);
 create index if not exists idx_savings_entries_zone on public.savings_entries(zone_id);
 
 -- ---------- row level security ----------
@@ -117,31 +145,51 @@ alter table public.categories enable row level security;
 alter table public.incomes enable row level security;
 alter table public.expenses enable row level security;
 alter table public.recurring_expenses enable row level security;
+alter table public.recurring_incomes enable row level security;
 alter table public.savings_state enable row level security;
 alter table public.savings_entries enable row level security;
+alter table public.category_budgets enable row level security;
 
+-- (select auth.uid()) is evaluated once per query instead of once per row.
 create policy "zones: owner full access" on public.zones
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+  for all to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 
 create policy "categories: read for authenticated" on public.categories
   for select to authenticated using (true);
 
 create policy "incomes: owner full access" on public.incomes
-  for all using (exists (select 1 from public.zones z where z.id = zone_id and z.user_id = auth.uid()))
-  with check (exists (select 1 from public.zones z where z.id = zone_id and z.user_id = auth.uid()));
+  for all to authenticated
+  using (exists (select 1 from public.zones z where z.id = zone_id and z.user_id = (select auth.uid())))
+  with check (exists (select 1 from public.zones z where z.id = zone_id and z.user_id = (select auth.uid())));
 
 create policy "expenses: owner full access" on public.expenses
-  for all using (exists (select 1 from public.zones z where z.id = zone_id and z.user_id = auth.uid()))
-  with check (exists (select 1 from public.zones z where z.id = zone_id and z.user_id = auth.uid()));
+  for all to authenticated
+  using (exists (select 1 from public.zones z where z.id = zone_id and z.user_id = (select auth.uid())))
+  with check (exists (select 1 from public.zones z where z.id = zone_id and z.user_id = (select auth.uid())));
 
 create policy "recurring: owner full access" on public.recurring_expenses
-  for all using (exists (select 1 from public.zones z where z.id = zone_id and z.user_id = auth.uid()))
-  with check (exists (select 1 from public.zones z where z.id = zone_id and z.user_id = auth.uid()));
+  for all to authenticated
+  using (exists (select 1 from public.zones z where z.id = zone_id and z.user_id = (select auth.uid())))
+  with check (exists (select 1 from public.zones z where z.id = zone_id and z.user_id = (select auth.uid())));
 
 create policy "savings_state: owner full access" on public.savings_state
-  for all using (exists (select 1 from public.zones z where z.id = zone_id and z.user_id = auth.uid()))
-  with check (exists (select 1 from public.zones z where z.id = zone_id and z.user_id = auth.uid()));
+  for all to authenticated
+  using (exists (select 1 from public.zones z where z.id = zone_id and z.user_id = (select auth.uid())))
+  with check (exists (select 1 from public.zones z where z.id = zone_id and z.user_id = (select auth.uid())));
 
 create policy "savings_entries: owner full access" on public.savings_entries
-  for all using (exists (select 1 from public.zones z where z.id = zone_id and z.user_id = auth.uid()))
-  with check (exists (select 1 from public.zones z where z.id = zone_id and z.user_id = auth.uid()));
+  for all to authenticated
+  using (exists (select 1 from public.zones z where z.id = zone_id and z.user_id = (select auth.uid())))
+  with check (exists (select 1 from public.zones z where z.id = zone_id and z.user_id = (select auth.uid())));
+
+create policy "category_budgets: owner full access" on public.category_budgets
+  for all to authenticated
+  using (exists (select 1 from public.zones z where z.id = zone_id and z.user_id = (select auth.uid())))
+  with check (exists (select 1 from public.zones z where z.id = zone_id and z.user_id = (select auth.uid())));
+
+create policy "recurring_incomes: owner full access" on public.recurring_incomes
+  for all to authenticated
+  using (exists (select 1 from public.zones z where z.id = zone_id and z.user_id = (select auth.uid())))
+  with check (exists (select 1 from public.zones z where z.id = zone_id and z.user_id = (select auth.uid())));

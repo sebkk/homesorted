@@ -21,14 +21,20 @@ export default function ZonesPage() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [newName, setNewName] = useState("");
 
-  async function load() {
-    const { data } = await supabase.from("zones").select("*").order("created_at", { ascending: true });
-    setZones((data as Zone[]) ?? []);
-    setLoading(false);
-  }
-
   useEffect(() => {
-    load();
+    let cancelled = false;
+    supabase
+      .from("zones")
+      .select("*")
+      .order("created_at", { ascending: true })
+      .then(({ data }) => {
+        if (cancelled) return;
+        setZones((data as Zone[]) ?? []);
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

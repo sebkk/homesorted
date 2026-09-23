@@ -22,6 +22,7 @@
   --good-soft: rgba(12, 163, 12, 0.14);
   --critical: #d03b3b;
   --critical-soft: rgba(208, 59, 59, 0.14);
+  --warning: #fab219;
   --border: rgba(255, 255, 255, 0.55);
   --glass-blur: blur(22px) saturate(180%);
   --shadow: 0 8px 28px rgba(20, 26, 32, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.55);
@@ -64,6 +65,7 @@
     --good-soft: rgba(12, 163, 12, 0.18);
     --critical: #d03b3b;
     --critical-soft: rgba(208, 59, 59, 0.22);
+    --warning: #fab219;
     --border: rgba(255, 255, 255, 0.14);
     --shadow: 0 8px 28px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
     --cat1: #3987e5;
@@ -105,6 +107,7 @@
   --good-soft: rgba(12, 163, 12, 0.18);
   --critical: #d03b3b;
   --critical-soft: rgba(208, 59, 59, 0.22);
+  --warning: #fab219;
   --border: rgba(255, 255, 255, 0.14);
   --shadow: 0 8px 28px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   --cat1: #3987e5;

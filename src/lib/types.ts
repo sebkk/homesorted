@@ -55,6 +55,36 @@ export interface SavingsEntry {
   amount: number; // negative = withdrawal
 }
 
+export interface RecurringIncome {
+  id: string;
+  zone_id: string;
+  type: IncomeType;
+  hours: number;
+  amount: number;
+  desc: string;
+  icon: string | null;
+  start_month: string; // "YYYY-MM"
+  end_month: string | null; // exclusive, forward-only cutoff
+  skip_months: string[];
+  created_at: string;
+}
+
+/** Fields shared by recurring expense and income templates. */
+export interface RecurringTemplate {
+  id: string;
+  zone_id: string;
+  start_month: string;
+  end_month: string | null;
+  skip_months: string[];
+  created_at: string;
+}
+
+export interface CategoryBudget {
+  zone_id: string;
+  category: string;
+  amount: number; // monthly limit, applies to every month
+}
+
 export interface SavingsState {
   initial: number;
   entries: SavingsEntry[];
@@ -75,6 +105,21 @@ export interface RecurringOccurrence {
 }
 
 export type AnyExpense = Expense | RecurringOccurrence;
+
+// A recurring income template expanded for one month, shaped like an Income.
+export interface RecurringIncomeOccurrence {
+  id: string; // "reci_<templateId>_<month>"
+  month: string;
+  type: IncomeType;
+  hours: number;
+  amount: number;
+  desc: string;
+  icon: string | null;
+  recurring: true;
+  templateId: string;
+}
+
+export type AnyIncome = Income | RecurringIncomeOccurrence;
 
 export const MONTHS = [
   "Styczeń",

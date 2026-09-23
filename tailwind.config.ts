@@ -35,6 +35,7 @@ const config: Config = {
         "good-soft": "var(--good-soft)",
         critical: "var(--critical)",
         "critical-soft": "var(--critical-soft)",
+        warning: "var(--warning)",
         border: "var(--border)",
         cat1: "var(--cat1)",
         cat2: "var(--cat2)",

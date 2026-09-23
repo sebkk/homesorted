@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Expense, Income, RecurringExpense, SavingsEntry } from "@/lib/types";
+import { CategoryBudget, Expense, Income, RecurringExpense, RecurringIncome, RecurringTemplate, SavingsEntry } from "@/lib/types";
 
 // Client-side data layer for one zone. Fetches everything once on mount
 // (sync is "poll at startup", per the agreed stack) and keeps local state in
@@ -17,31 +17,38 @@ export function useZoneData(zoneId: string | null) {
   const [incomes, setIncomes] = useState<Income[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [recurring, setRecurring] = useState<RecurringExpense[]>([]);
+  const [recurringIncomes, setRecurringIncomes] = useState<RecurringIncome[]>([]);
   const [savingsInitial, setSavingsInitialState] = useState(0);
   const [savingsEntries, setSavingsEntries] = useState<SavingsEntry[]>([]);
+  const [budgets, setBudgets] = useState<CategoryBudget[]>([]);
 
-  const reload = useCallback(async () => {
+  useEffect(() => {
     if (!zoneId) return;
-    setLoading(true);
-    const [incomesRes, expensesRes, recurringRes, savingsStateRes, savingsEntriesRes] = await Promise.all([
+    let cancelled = false;
+    Promise.all([
       supabase.from("incomes").select("*").eq("zone_id", zoneId),
       supabase.from("expenses").select("*").eq("zone_id", zoneId),
       supabase.from("recurring_expenses").select("*").eq("zone_id", zoneId),
       supabase.from("savings_state").select("*").eq("zone_id", zoneId).maybeSingle(),
       supabase.from("savings_entries").select("*").eq("zone_id", zoneId),
-    ]);
-    setIncomes((incomesRes.data as Income[]) ?? []);
-    setExpenses((expensesRes.data as Expense[]) ?? []);
-    setRecurring((recurringRes.data as RecurringExpense[]) ?? []);
-    setSavingsInitialState(savingsStateRes.data?.initial ?? 0);
-    setSavingsEntries((savingsEntriesRes.data as SavingsEntry[]) ?? []);
-    setLoading(false);
+      supabase.from("category_budgets").select("*").eq("zone_id", zoneId),
+      supabase.from("recurring_incomes").select("*").eq("zone_id", zoneId),
+    ]).then(([incomesRes, expensesRes, recurringRes, savingsStateRes, savingsEntriesRes, budgetsRes, recurringIncomesRes]) => {
+      if (cancelled) return;
+      setRecurringIncomes((recurringIncomesRes.data as RecurringIncome[]) ?? []);
+      setBudgets(((budgetsRes.data as CategoryBudget[]) ?? []).map((b) => ({ ...b, amount: Number(b.amount) })));
+      setIncomes((incomesRes.data as Income[]) ?? []);
+      setExpenses((expensesRes.data as Expense[]) ?? []);
+      setRecurring((recurringRes.data as RecurringExpense[]) ?? []);
+      setSavingsInitialState(savingsStateRes.data?.initial ?? 0);
+      setSavingsEntries((savingsEntriesRes.data as SavingsEntry[]) ?? []);
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zoneId]);
-
-  useEffect(() => {
-    reload();
-  }, [reload]);
 
   // ---------- incomes ----------
   async function addIncome(income: Omit<Income, "id" | "zone_id">) {
@@ -69,8 +76,10 @@ export function useZoneData(zoneId: string | null) {
   }
 
   async function updateIncome(id: string, patch: Partial<Omit<Income, "id" | "zone_id">>) {
+    const before = incomes.find((x) => x.id === id);
     setIncomes((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
     const { error } = await supabase.from("incomes").update(patch).eq("id", id);
+    if (error && before) setIncomes((prev) => prev.map((x) => (x.id === id ? before : x)));
     return error;
   }
 
@@ -87,8 +96,10 @@ export function useZoneData(zoneId: string | null) {
   }
 
   async function updateExpense(id: string, patch: Partial<Omit<Expense, "id" | "zone_id">>) {
+    const before = expenses.find((x) => x.id === id);
     setExpenses((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
     const { error } = await supabase.from("expenses").update(patch).eq("id", id);
+    if (error && before) setExpenses((prev) => prev.map((x) => (x.id === id ? before : x)));
     return error;
   }
 
@@ -105,63 +116,97 @@ export function useZoneData(zoneId: string | null) {
     if (data) setExpenses((prev) => [...prev, data as Expense]);
   }
 
-  // ---------- recurring expenses ----------
-  async function addRecurring(rec: Omit<RecurringExpense, "id" | "zone_id" | "skip_months" | "created_at">) {
-    if (!zoneId) return;
-    const { data, error } = await supabase
-      .from("recurring_expenses")
-      .insert({ ...rec, zone_id: zoneId, skip_months: [] })
-      .select()
-      .single();
-    if (!error && data) setRecurring((prev) => [...prev, data as RecurringExpense]);
-    return error;
+  // ---------- recurring templates (expenses & incomes) ----------
+  // Both tables share the same template semantics, so one set of operations
+  // serves both; each instance is bound to its table and state.
+  function recurringOps<T extends RecurringTemplate>(
+    table: "recurring_expenses" | "recurring_incomes",
+    items: T[],
+    setItems: Dispatch<SetStateAction<T[]>>
+  ) {
+    type Fields = Omit<T, "id" | "zone_id" | "skip_months" | "created_at">;
+
+    async function add(fields: Fields) {
+      if (!zoneId) return;
+      const { data, error } = await supabase
+        .from(table)
+        .insert({ ...fields, zone_id: zoneId, skip_months: [] })
+        .select()
+        .single();
+      if (!error && data) setItems((prev) => [...prev, data as T]);
+      return error;
+    }
+
+    async function update(id: string, patch: Partial<Fields>) {
+      const before = items.find((r) => r.id === id);
+      setItems((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+      const { error } = await supabase.from(table).update(patch as Record<string, unknown>).eq("id", id);
+      if (error && before) setItems((prev) => prev.map((r) => (r.id === id ? before : r)));
+      return error;
+    }
+
+    async function setSkipped(id: string, monthKey: string, skipped: boolean) {
+      const tpl = items.find((r) => r.id === id);
+      if (!tpl) return;
+      const has = tpl.skip_months.includes(monthKey);
+      const next = skipped ? (has ? tpl.skip_months : [...tpl.skip_months, monthKey]) : tpl.skip_months.filter((m) => m !== monthKey);
+      setItems((prev) => prev.map((r) => (r.id === id ? { ...r, skip_months: next } : r)));
+      await supabase.from(table).update({ skip_months: next }).eq("id", id);
+    }
+
+    /** Forward-only cutoff from `monthKey`; earlier months keep their totals.
+     * If the template hadn't started before `monthKey` there's nothing to keep,
+     * so it's deleted outright instead of leaving a template that applies to
+     * zero months. Returns an undo for either case. */
+    async function disableFrom(id: string, monthKey: string): Promise<{ deleted: boolean; undo: () => Promise<void> } | null> {
+      const tpl = items.find((r) => r.id === id);
+      if (!tpl) return null;
+
+      if (monthKey <= tpl.start_month) {
+        setItems((prev) => prev.filter((r) => r.id !== id));
+        await supabase.from(table).delete().eq("id", id);
+        return {
+          deleted: true,
+          undo: async () => {
+            const { data } = await supabase.from(table).insert(tpl).select().single();
+            if (data) setItems((prev) => [...prev, data as T]);
+          },
+        };
+      }
+
+      const prevEnd = tpl.end_month;
+      const nextEnd = !prevEnd || monthKey < prevEnd ? monthKey : prevEnd;
+      setItems((prev) => prev.map((r) => (r.id === id ? { ...r, end_month: nextEnd } : r)));
+      await supabase.from(table).update({ end_month: nextEnd }).eq("id", id);
+      return {
+        deleted: false,
+        undo: async () => {
+          setItems((prev) => prev.map((r) => (r.id === id ? { ...r, end_month: prevEnd } : r)));
+          await supabase.from(table).update({ end_month: prevEnd }).eq("id", id);
+        },
+      };
+    }
+
+    return {
+      add,
+      update,
+      skip: (id: string, monthKey: string) => setSkipped(id, monthKey, true),
+      undoSkip: (id: string, monthKey: string) => setSkipped(id, monthKey, false),
+      disableFrom,
+    };
   }
 
-  async function updateRecurring(id: string, patch: Partial<Omit<RecurringExpense, "id" | "zone_id" | "skip_months" | "created_at">>) {
-    setRecurring((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-    const { error } = await supabase.from("recurring_expenses").update(patch).eq("id", id);
-    return error;
-  }
-
-  /** One-off exception: this single month is skipped, the template stays active. */
-  async function skipRecurringMonth(templateId: string, monthKey: string) {
-    const tpl = recurring.find((r) => r.id === templateId);
-    if (!tpl) return;
-    const nextSkip = tpl.skip_months.includes(monthKey) ? tpl.skip_months : [...tpl.skip_months, monthKey];
-    setRecurring((prev) => prev.map((r) => (r.id === templateId ? { ...r, skip_months: nextSkip } : r)));
-    await supabase.from("recurring_expenses").update({ skip_months: nextSkip }).eq("id", templateId);
-  }
-
-  async function undoSkipRecurringMonth(templateId: string, monthKey: string) {
-    const tpl = recurring.find((r) => r.id === templateId);
-    if (!tpl) return;
-    const nextSkip = tpl.skip_months.filter((m) => m !== monthKey);
-    setRecurring((prev) => prev.map((r) => (r.id === templateId ? { ...r, skip_months: nextSkip } : r)));
-    await supabase.from("recurring_expenses").update({ skip_months: nextSkip }).eq("id", templateId);
-  }
-
-  /** Forward-only cutoff: months >= monthKey stop generating occurrences;
-   * earlier months (and their historical totals) are untouched. */
-  async function disableRecurringFrom(templateId: string, monthKey: string) {
-    const tpl = recurring.find((r) => r.id === templateId);
-    if (!tpl) return null;
-    const prevEnd = tpl.end_month;
-    const nextEnd = !prevEnd || monthKey < prevEnd ? monthKey : prevEnd;
-    setRecurring((prev) => prev.map((r) => (r.id === templateId ? { ...r, end_month: nextEnd } : r)));
-    await supabase.from("recurring_expenses").update({ end_month: nextEnd }).eq("id", templateId);
-    return prevEnd;
-  }
-
-  async function restoreRecurringEnd(templateId: string, prevEnd: string | null) {
-    setRecurring((prev) => prev.map((r) => (r.id === templateId ? { ...r, end_month: prevEnd } : r)));
-    await supabase.from("recurring_expenses").update({ end_month: prevEnd }).eq("id", templateId);
-  }
+  const recurringExpenseOps = recurringOps("recurring_expenses", recurring, setRecurring);
+  const recurringIncomeOps = recurringOps("recurring_incomes", recurringIncomes, setRecurringIncomes);
 
   // ---------- savings ----------
   async function setSavingsInitial(value: number) {
     if (!zoneId) return;
+    const before = savingsInitial;
     setSavingsInitialState(value);
-    await supabase.from("savings_state").upsert({ zone_id: zoneId, initial: value });
+    const { error } = await supabase.from("savings_state").upsert({ zone_id: zoneId, initial: value });
+    if (error) setSavingsInitialState(before);
+    return error;
   }
 
   async function addSavingsEntry(entry: Omit<SavingsEntry, "id" | "zone_id">) {
@@ -189,19 +234,44 @@ export function useZoneData(zoneId: string | null) {
   }
 
   async function updateSavingsEntry(id: string, patch: Partial<Omit<SavingsEntry, "id" | "zone_id">>) {
+    const before = savingsEntries.find((x) => x.id === id);
     setSavingsEntries((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
     const { error } = await supabase.from("savings_entries").update(patch).eq("id", id);
+    if (error && before) setSavingsEntries((prev) => prev.map((x) => (x.id === id ? before : x)));
     return error;
+  }
+
+  // ---------- budgets ----------
+  /** Replaces the zone's budgets: categories mapped to a positive amount are
+   * upserted, everything else (cleared inputs) is removed. */
+  async function saveBudgets(limits: Record<string, number>) {
+    if (!zoneId) return;
+    const keep = Object.entries(limits).filter(([, amount]) => amount > 0);
+    const drop = budgets.map((b) => b.category).filter((c) => !keep.some(([k]) => k === c));
+
+    if (keep.length > 0) {
+      const { error } = await supabase
+        .from("category_budgets")
+        .upsert(keep.map(([category, amount]) => ({ zone_id: zoneId, category, amount })));
+      if (error) return error;
+    }
+    if (drop.length > 0) {
+      const { error } = await supabase.from("category_budgets").delete().eq("zone_id", zoneId).in("category", drop);
+      if (error) return error;
+    }
+    setBudgets(keep.map(([category, amount]) => ({ zone_id: zoneId, category, amount })));
+    return null;
   }
 
   return {
     loading,
+    budgets,
+    saveBudgets,
     incomes,
     expenses,
     recurring,
     savingsInitial,
     savingsEntries,
-    reload,
     addIncome,
     updateIncome,
     deleteIncome,
@@ -210,12 +280,9 @@ export function useZoneData(zoneId: string | null) {
     updateExpense,
     deleteExpense,
     restoreExpense,
-    addRecurring,
-    updateRecurring,
-    skipRecurringMonth,
-    undoSkipRecurringMonth,
-    disableRecurringFrom,
-    restoreRecurringEnd,
+    recurringIncomes,
+    recurringExpenseOps,
+    recurringIncomeOps,
     setSavingsInitial,
     addSavingsEntry,
     updateSavingsEntry,
