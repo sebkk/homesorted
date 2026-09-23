@@ -57,7 +57,7 @@ export function DashboardTab({
       amount: x.amount,
     })),
   ]
-    .sort((a, b) => (a.date < b.date ? 1 : -1))
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
     .slice(0, 5);
 
   return (

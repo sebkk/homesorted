@@ -1,16 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useZoneData } from "@/lib/useZoneData";
-import { fmt, monthLabel, todayStr } from "@/lib/finance";
-import { CATEGORIES, IncomeType, INCOME_TYPE_LABELS } from "@/lib/types";
+import { useCategories } from "@/lib/useCategories";
+import { daysInMonth, fmt, monthLabel, monthLabelGenitive, nextMonth, prevMonth, todayStr } from "@/lib/finance";
+import { standardWorkHours, workingDaysInMonth } from "@/lib/polishHolidays";
+import { Expense, Income, IncomeType, INCOME_TYPE_ICONS, INCOME_TYPE_LABELS, RecurringExpense, SavingsEntry } from "@/lib/types";
 import { Sheet, SheetHeader, Field } from "@/components/ui/Sheet";
 import { useToast } from "@/components/ui/Toast";
 
 export type SheetState =
   | { type: "income" }
+  | { type: "editIncome"; income: Income }
   | { type: "expense" }
+  | { type: "editExpense"; expense: Expense }
+  | { type: "editRecurring"; recurring: RecurringExpense }
   | { type: "savings" }
+  | { type: "editSavings"; entry: SavingsEntry }
   | { type: "editInitial" }
   | { type: "recurringMenu"; templateId: string; month: string }
   | null;
@@ -32,8 +38,18 @@ export function FinanceSheets({
   return (
     <Sheet open={sheet !== null} onClose={onClose}>
       {sheet?.type === "income" && <IncomeForm zd={zd} currentMonth={currentMonth} onClose={onClose} />}
+      {sheet?.type === "editIncome" && (
+        <IncomeForm zd={zd} currentMonth={currentMonth} onClose={onClose} editing={sheet.income} />
+      )}
       {sheet?.type === "expense" && <ExpenseForm zd={zd} currentMonth={currentMonth} onClose={onClose} />}
+      {sheet?.type === "editExpense" && (
+        <ExpenseForm zd={zd} currentMonth={currentMonth} onClose={onClose} editingExpense={sheet.expense} />
+      )}
+      {sheet?.type === "editRecurring" && (
+        <ExpenseForm zd={zd} currentMonth={currentMonth} onClose={onClose} editingRecurring={sheet.recurring} />
+      )}
       {sheet?.type === "savings" && <SavingsForm zd={zd} onClose={onClose} />}
+      {sheet?.type === "editSavings" && <SavingsForm zd={zd} onClose={onClose} editing={sheet.entry} />}
       {sheet?.type === "editInitial" && <EditInitialForm zd={zd} onClose={onClose} />}
       {sheet?.type === "recurringMenu" && (
         <RecurringMenu zd={zd} templateId={sheet.templateId} month={sheet.month} onClose={onClose} />
@@ -47,30 +63,51 @@ function IncomeForm({
   zd,
   currentMonth,
   onClose,
+  editing,
 }: {
   zd: ReturnType<typeof useZoneData>;
   currentMonth: string;
   onClose: () => void;
+  editing?: Income;
 }) {
   const { showToast } = useToast();
-  const [type, setType] = useState<IncomeType>("b2b");
-  const [month, setMonth] = useState(currentMonth);
-  const [hours, setHours] = useState("");
-  const [amount, setAmount] = useState("");
-  const [desc, setDesc] = useState("");
+  const [type, setType] = useState<IncomeType>(editing?.type ?? "b2b");
+  const [month, setMonth] = useState(editing?.month ?? currentMonth);
+  const [hours, setHours] = useState(editing ? String(editing.hours) : "");
+  const [amount, setAmount] = useState(editing ? String(editing.amount) : "");
+  const [desc, setDesc] = useState(editing?.desc ?? "");
   const [applyVat, setApplyVat] = useState(false);
+  const [icon, setIcon] = useState(editing?.icon ?? "");
 
   const baseAmount = parseFloat(amount) || 0;
-  const finalAmount = type === "b2b" && applyVat ? baseAmount * 1.23 : baseAmount;
+  const finalAmount = !editing && type === "b2b" && applyVat ? baseAmount * 1.23 : baseAmount;
 
   async function handleSave() {
     if (baseAmount <= 0) return;
+
+    if (editing) {
+      const error = await zd.updateIncome(editing.id, {
+        month,
+        type,
+        hours: parseFloat(hours) || 0,
+        amount: baseAmount,
+        desc: desc.trim(),
+        icon: icon.trim() || null,
+      });
+      if (!error) {
+        onClose();
+        showToast("Zapisano zmiany");
+      }
+      return;
+    }
+
     const error = await zd.addIncome({
       month,
       type,
       hours: parseFloat(hours) || 0,
       amount: finalAmount,
       desc: desc.trim(),
+      icon: icon.trim() || null,
     });
     if (!error) {
       onClose();
@@ -80,7 +117,7 @@ function IncomeForm({
 
   return (
     <>
-      <SheetHeader title="Nowy zarobek" onClose={onClose} />
+      <SheetHeader title={editing ? "Edytuj zarobek" : "Nowy zarobek"} onClose={onClose} />
       <Field label="Typ przychodu" htmlFor="incType">
         <select id="incType" value={type} onChange={(e) => setType(e.target.value as IncomeType)} className={inputClass}>
           {(Object.keys(INCOME_TYPE_LABELS) as IncomeType[]).map((t) => (
@@ -95,7 +132,19 @@ function IncomeForm({
       </Field>
       {type === "b2b" && (
         <Field label="Godziny (opcjonalnie)" htmlFor="incHours" hint="Do wyliczenia stawki zł/h na czysto.">
-          <input id="incHours" type="number" min={0} step={1} value={hours} onChange={(e) => setHours(e.target.value)} className={inputClass} placeholder="0" />
+          <div className="flex flex-row gap-2 items-center">
+            <input id="incHours" type="number" min={0} step={1} value={hours} onChange={(e) => setHours(e.target.value)} className={inputClass + " flex-1"} placeholder="0" />
+            <button
+              type="button"
+              onClick={() => setHours(String(standardWorkHours(month)))}
+              className="text-[12.5px] font-semibold text-accent bg-accent-soft rounded-md px-3 py-2.5 whitespace-nowrap"
+            >
+              Z dni roboczych
+            </button>
+          </div>
+          <div className="text-[11.5px] text-ink-muted mt-1">
+            {monthLabel(month)}: {workingDaysInMonth(month)} dni robocze (bez weekendów i świąt) × 8h = {standardWorkHours(month)} h
+          </div>
         </Field>
       )}
       {type !== "b2b" && (
@@ -106,17 +155,28 @@ function IncomeForm({
       <Field label="Kwota netto" htmlFor="incAmount">
         <input id="incAmount" type="number" min={0} step={0.01} value={amount} onChange={(e) => setAmount(e.target.value)} className={inputClass} placeholder="0" />
       </Field>
-      {type === "b2b" && (
+      <Field label="Ikona (opcjonalnie)" htmlFor="incIcon" hint={`Domyślna dla tego typu: ${INCOME_TYPE_ICONS[type]}`}>
+        <input
+          id="incIcon"
+          type="text"
+          value={icon}
+          onChange={(e) => setIcon(e.target.value)}
+          placeholder={INCOME_TYPE_ICONS[type]}
+          maxLength={4}
+          className={inputClass + " text-[18px] text-center w-16"}
+        />
+      </Field>
+      {!editing && type === "b2b" && (
         <label className="flex flex-row items-center gap-2.5" htmlFor="incVat">
           <input id="incVat" type="checkbox" checked={applyVat} onChange={(e) => setApplyVat(e.target.checked)} className="w-[17px] h-[17px] accent-accent shrink-0" />
           <span className="text-[13px]">Doliczyć VAT 23%</span>
         </label>
       )}
-      {type === "b2b" && applyVat && baseAmount > 0 && (
+      {!editing && type === "b2b" && applyVat && baseAmount > 0 && (
         <div className="text-[12px] text-ink-muted">Kwota brutto: {fmt(finalAmount)}</div>
       )}
       <button type="button" onClick={handleSave} className="font-bold text-[14.5px] text-accent-ink bg-accent rounded-md py-3 mb-1">
-        Zapisz
+        {editing ? "Zapisz zmiany" : "Zapisz"}
       </button>
     </>
   );
@@ -127,22 +187,79 @@ function ExpenseForm({
   zd,
   currentMonth,
   onClose,
+  editingExpense,
+  editingRecurring,
 }: {
   zd: ReturnType<typeof useZoneData>;
   currentMonth: string;
   onClose: () => void;
+  editingExpense?: Expense;
+  editingRecurring?: RecurringExpense;
 }) {
   const { showToast } = useToast();
-  const [category, setCategory] = useState<string>(CATEGORIES[0]);
-  const [desc, setDesc] = useState("");
-  const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(todayStr());
-  const [isRecurring, setIsRecurring] = useState(false);
-  const [dayOfMonth, setDayOfMonth] = useState("1");
+  const categories = useCategories();
+  const [category, setCategory] = useState<string>(editingExpense?.category ?? editingRecurring?.category ?? "");
+  useEffect(() => {
+    if (!category && categories.length > 0) setCategory(categories[0].name);
+  }, [categories, category]);
+  const [desc, setDesc] = useState(editingExpense?.desc ?? editingRecurring?.desc ?? "");
+  const [amount, setAmount] = useState(
+    editingExpense ? String(editingExpense.amount) : editingRecurring ? String(editingRecurring.amount) : ""
+  );
+  const [date, setDate] = useState(editingExpense?.date ?? todayStr());
+  const [icon, setIcon] = useState(editingExpense?.icon ?? editingRecurring?.icon ?? "");
+  const [isRecurring, setIsRecurring] = useState(!!editingRecurring);
+  const [dayOfMonth, setDayOfMonth] = useState(editingRecurring ? String(editingRecurring.day_of_month) : "1");
+  const [startMonth, setStartMonth] = useState(editingRecurring?.start_month ?? currentMonth);
+  const [endMonth, setEndMonth] = useState(editingRecurring?.end_month ? prevMonth(editingRecurring.end_month) : ""); // last active month, inclusive; "" = no end
+  const maxDay = daysInMonth(startMonth);
+  const selectedCategoryIcon = categories.find((c) => c.name === category)?.icon ?? "📦";
+
+  function handleStartMonthChange(value: string) {
+    setStartMonth(value);
+    if (parseInt(dayOfMonth, 10) > daysInMonth(value)) setDayOfMonth(String(daysInMonth(value)));
+    if (endMonth && endMonth < value) setEndMonth(value);
+  }
+
+  function handleEndMonthChange(value: string) {
+    setEndMonth(value && value < startMonth ? startMonth : value);
+  }
 
   async function handleSave() {
     const value = parseFloat(amount) || 0;
     if (value <= 0) return;
+
+    if (editingExpense) {
+      const error = await zd.updateExpense(editingExpense.id, {
+        date,
+        category,
+        desc: desc.trim(),
+        amount: value,
+        icon: icon.trim() || null,
+      });
+      if (!error) {
+        onClose();
+        showToast("Zapisano zmiany");
+      }
+      return;
+    }
+
+    if (editingRecurring) {
+      const error = await zd.updateRecurring(editingRecurring.id, {
+        category,
+        desc: desc.trim(),
+        amount: value,
+        day_of_month: parseInt(dayOfMonth, 10) || 1,
+        start_month: startMonth,
+        end_month: endMonth ? nextMonth(endMonth) : null,
+        icon: icon.trim() || null,
+      });
+      if (!error) {
+        onClose();
+        showToast("Zapisano zmiany");
+      }
+      return;
+    }
 
     if (isRecurring) {
       const error = await zd.addRecurring({
@@ -150,7 +267,9 @@ function ExpenseForm({
         desc: desc.trim(),
         amount: value,
         day_of_month: parseInt(dayOfMonth, 10) || 1,
-        start_month: currentMonth,
+        start_month: startMonth,
+        end_month: endMonth ? nextMonth(endMonth) : null,
+        icon: icon.trim() || null,
       });
       if (!error) {
         onClose();
@@ -159,7 +278,7 @@ function ExpenseForm({
       return;
     }
 
-    const error = await zd.addExpense({ date, category, desc: desc.trim(), amount: value });
+    const error = await zd.addExpense({ date, category, desc: desc.trim(), amount: value, icon: icon.trim() || null });
     if (!error) {
       onClose();
       showToast("Dodano wydatek");
@@ -168,12 +287,15 @@ function ExpenseForm({
 
   return (
     <>
-      <SheetHeader title="Nowy wydatek" onClose={onClose} />
+      <SheetHeader
+        title={editingExpense ? "Edytuj wydatek" : editingRecurring ? "Edytuj wydatek stały" : "Nowy wydatek"}
+        onClose={onClose}
+      />
       <Field label="Kategoria" htmlFor="expCategory">
         <select id="expCategory" value={category} onChange={(e) => setCategory(e.target.value)} className={inputClass}>
-          {CATEGORIES.map((c) => (
-            <option key={c} value={c}>
-              {c}
+          {categories.map((c) => (
+            <option key={c.name} value={c.name}>
+              {c.icon} {c.name}
             </option>
           ))}
         </select>
@@ -184,16 +306,91 @@ function ExpenseForm({
       <Field label="Kwota" htmlFor="expAmount">
         <input id="expAmount" type="number" min={0} step={0.01} value={amount} onChange={(e) => setAmount(e.target.value)} className={inputClass} placeholder="0" />
       </Field>
+      <Field label="Ikona (opcjonalnie)" htmlFor="expIcon" hint={`Domyślna dla tej kategorii: ${selectedCategoryIcon}`}>
+        <input
+          id="expIcon"
+          type="text"
+          value={icon}
+          onChange={(e) => setIcon(e.target.value)}
+          placeholder={selectedCategoryIcon}
+          maxLength={4}
+          className={inputClass + " text-[18px] text-center w-16"}
+        />
+      </Field>
 
-      <label className="flex flex-row items-center gap-2.5" htmlFor="expRecurring">
-        <input id="expRecurring" type="checkbox" checked={isRecurring} onChange={(e) => setIsRecurring(e.target.checked)} className="w-[17px] h-[17px] accent-accent shrink-0" />
-        <span className="text-[13px]">To wydatek stały (co miesiąc)</span>
-      </label>
+      {!editingExpense && !editingRecurring && (
+        <label className="flex flex-row items-center gap-2.5" htmlFor="expRecurring">
+          <input id="expRecurring" type="checkbox" checked={isRecurring} onChange={(e) => setIsRecurring(e.target.checked)} className="w-[17px] h-[17px] accent-accent shrink-0" />
+          <span className="text-[13px]">To wydatek stały (co miesiąc)</span>
+        </label>
+      )}
 
       {isRecurring ? (
-        <Field label="Dzień miesiąca" htmlFor="expDay" hint={`Wydatek stały zacznie obowiązywać od ${monthLabel(currentMonth)}.`}>
-          <input id="expDay" type="number" min={1} max={28} value={dayOfMonth} onChange={(e) => setDayOfMonth(e.target.value)} className={inputClass} />
-        </Field>
+        <>
+          <Field
+            label="Dzień miesiąca"
+            htmlFor="expDay"
+            hint={
+              parseInt(dayOfMonth, 10) > 28
+                ? "W krótszych miesiącach (np. luty) doliczy się w ich ostatnim dniu."
+                : undefined
+            }
+          >
+            <select id="expDay" value={dayOfMonth} onChange={(e) => setDayOfMonth(e.target.value)} className={inputClass}>
+              {Array.from({ length: maxDay }, (_, i) => i + 1).map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field
+            label="Obowiązuje od"
+            htmlFor="expStartMonth"
+            hint={
+              startMonth < currentMonth
+                ? `Doliczy się też do wcześniejszych miesięcy, od ${monthLabelGenitive(startMonth)}.`
+                : `Wydatek stały zacznie obowiązywać od ${monthLabelGenitive(startMonth)}.`
+            }
+          >
+            <input
+              id="expStartMonth"
+              type="month"
+              value={startMonth}
+              onChange={(e) => handleStartMonthChange(e.target.value)}
+              className={inputClass}
+            />
+          </Field>
+          <Field
+            label="Do (opcjonalnie)"
+            htmlFor="expEndMonth"
+            hint={
+              endMonth
+                ? `Ostatni miesiąc: ${monthLabel(endMonth)}. Od ${monthLabelGenitive(nextMonth(endMonth))} wydatek już się nie doliczy.`
+                : "Zostaw puste, żeby wydatek trwał bezterminowo."
+            }
+          >
+            <div className="flex flex-row gap-2 items-center">
+              <input
+                id="expEndMonth"
+                type="month"
+                min={startMonth}
+                value={endMonth}
+                onChange={(e) => handleEndMonthChange(e.target.value)}
+                className={inputClass + " flex-1"}
+              />
+              {endMonth && (
+                <button
+                  type="button"
+                  onClick={() => setEndMonth("")}
+                  className="text-[12.5px] font-semibold text-ink-muted bg-surface-2 rounded-md px-3 py-2.5 whitespace-nowrap"
+                >
+                  Usuń
+                </button>
+              )}
+            </div>
+          </Field>
+        </>
       ) : (
         <Field label="Data" htmlFor="expDate">
           <input id="expDate" type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputClass} />
@@ -201,24 +398,43 @@ function ExpenseForm({
       )}
 
       <button type="button" onClick={handleSave} className="font-bold text-[14.5px] text-accent-ink bg-accent rounded-md py-3 mb-1">
-        Zapisz
+        {editingExpense || editingRecurring ? "Zapisz zmiany" : "Zapisz"}
       </button>
     </>
   );
 }
 
 // ---------- savings ----------
-function SavingsForm({ zd, onClose }: { zd: ReturnType<typeof useZoneData>; onClose: () => void }) {
+function SavingsForm({
+  zd,
+  onClose,
+  editing,
+}: {
+  zd: ReturnType<typeof useZoneData>;
+  onClose: () => void;
+  editing?: SavingsEntry;
+}) {
   const { showToast } = useToast();
-  const [date, setDate] = useState(todayStr());
-  const [desc, setDesc] = useState("");
-  const [amount, setAmount] = useState("");
-  const [withdraw, setWithdraw] = useState(false);
+  const [date, setDate] = useState(editing?.date ?? todayStr());
+  const [desc, setDesc] = useState(editing?.desc ?? "");
+  const [amount, setAmount] = useState(editing ? String(Math.abs(editing.amount)) : "");
+  const [withdraw, setWithdraw] = useState(editing ? editing.amount < 0 : false);
 
   async function handleSave() {
     const value = parseFloat(amount) || 0;
     if (value <= 0) return;
-    const error = await zd.addSavingsEntry({ date, desc: desc.trim(), amount: withdraw ? -value : value });
+    const signedAmount = withdraw ? -value : value;
+
+    if (editing) {
+      const error = await zd.updateSavingsEntry(editing.id, { date, desc: desc.trim(), amount: signedAmount });
+      if (!error) {
+        onClose();
+        showToast("Zapisano zmiany");
+      }
+      return;
+    }
+
+    const error = await zd.addSavingsEntry({ date, desc: desc.trim(), amount: signedAmount });
     if (!error) {
       onClose();
       showToast("Zapisano");
@@ -227,7 +443,7 @@ function SavingsForm({ zd, onClose }: { zd: ReturnType<typeof useZoneData>; onCl
 
   return (
     <>
-      <SheetHeader title="Dodaj do oszczędności" onClose={onClose} />
+      <SheetHeader title={editing ? "Edytuj wpis" : "Dodaj do oszczędności"} onClose={onClose} />
       <Field label="Data" htmlFor="savDate">
         <input id="savDate" type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputClass} />
       </Field>
@@ -242,7 +458,7 @@ function SavingsForm({ zd, onClose }: { zd: ReturnType<typeof useZoneData>; onCl
         <span className="text-[13px]">To wypłata (odejmij od oszczędności)</span>
       </label>
       <button type="button" onClick={handleSave} className="font-bold text-[14.5px] text-accent-ink bg-accent rounded-md py-3 mb-1">
-        Zapisz
+        {editing ? "Zapisz zmiany" : "Zapisz"}
       </button>
     </>
   );

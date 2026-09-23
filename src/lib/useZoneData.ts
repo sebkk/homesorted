@@ -68,6 +68,12 @@ export function useZoneData(zoneId: string | null) {
     if (data) setIncomes((prev) => [...prev, data as Income]);
   }
 
+  async function updateIncome(id: string, patch: Partial<Omit<Income, "id" | "zone_id">>) {
+    setIncomes((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+    const { error } = await supabase.from("incomes").update(patch).eq("id", id);
+    return error;
+  }
+
   // ---------- expenses ----------
   async function addExpense(expense: Omit<Expense, "id" | "zone_id">) {
     if (!zoneId) return;
@@ -77,6 +83,12 @@ export function useZoneData(zoneId: string | null) {
       .select()
       .single();
     if (!error && data) setExpenses((prev) => [...prev, data as Expense]);
+    return error;
+  }
+
+  async function updateExpense(id: string, patch: Partial<Omit<Expense, "id" | "zone_id">>) {
+    setExpenses((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+    const { error } = await supabase.from("expenses").update(patch).eq("id", id);
     return error;
   }
 
@@ -94,14 +106,20 @@ export function useZoneData(zoneId: string | null) {
   }
 
   // ---------- recurring expenses ----------
-  async function addRecurring(rec: Omit<RecurringExpense, "id" | "zone_id" | "skip_months" | "end_month">) {
+  async function addRecurring(rec: Omit<RecurringExpense, "id" | "zone_id" | "skip_months" | "created_at">) {
     if (!zoneId) return;
     const { data, error } = await supabase
       .from("recurring_expenses")
-      .insert({ ...rec, zone_id: zoneId, skip_months: [], end_month: null })
+      .insert({ ...rec, zone_id: zoneId, skip_months: [] })
       .select()
       .single();
     if (!error && data) setRecurring((prev) => [...prev, data as RecurringExpense]);
+    return error;
+  }
+
+  async function updateRecurring(id: string, patch: Partial<Omit<RecurringExpense, "id" | "zone_id" | "skip_months" | "created_at">>) {
+    setRecurring((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+    const { error } = await supabase.from("recurring_expenses").update(patch).eq("id", id);
     return error;
   }
 
@@ -170,6 +188,12 @@ export function useZoneData(zoneId: string | null) {
     if (data) setSavingsEntries((prev) => [...prev, data as SavingsEntry]);
   }
 
+  async function updateSavingsEntry(id: string, patch: Partial<Omit<SavingsEntry, "id" | "zone_id">>) {
+    setSavingsEntries((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+    const { error } = await supabase.from("savings_entries").update(patch).eq("id", id);
+    return error;
+  }
+
   return {
     loading,
     incomes,
@@ -179,18 +203,22 @@ export function useZoneData(zoneId: string | null) {
     savingsEntries,
     reload,
     addIncome,
+    updateIncome,
     deleteIncome,
     restoreIncome,
     addExpense,
+    updateExpense,
     deleteExpense,
     restoreExpense,
     addRecurring,
+    updateRecurring,
     skipRecurringMonth,
     undoSkipRecurringMonth,
     disableRecurringFrom,
     restoreRecurringEnd,
     setSavingsInitial,
     addSavingsEntry,
+    updateSavingsEntry,
     deleteSavingsEntry,
     restoreSavingsEntry,
   };

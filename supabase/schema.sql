@@ -23,8 +23,38 @@ create table if not exists public.incomes (
   hours numeric not null default 0,
   amount numeric not null default 0,
   "desc" text not null default '',
+  icon text, -- overrides INCOME_TYPE_ICONS[type] (app-side) when set
   created_at timestamptz not null default now()
 );
+
+-- ---------- expense categories ----------
+-- Global, shared across all users — managed here / via SQL editor, not per-zone.
+create table if not exists public.categories (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  icon text not null default '💳',
+  sort_order smallint not null default 0,
+  created_at timestamptz not null default now()
+);
+
+insert into public.categories (name, icon, sort_order) values
+  ('ZUS', '🏛️', 1),
+  ('Podatek', '💰', 2),
+  ('VAT', '🧾', 3),
+  ('Mieszkanie/czynsz', '🏠', 4),
+  ('Kredyt', '🏦', 5),
+  ('Rachunki (prąd, internet)', '💡', 6),
+  ('Jedzenie', '🍔', 7),
+  ('Transport/paliwo', '⛽', 8),
+  ('Sprzęt/oprogramowanie', '💻', 9),
+  ('Księgowość', '📊', 10),
+  ('Ubezpieczenie', '🛡️', 11),
+  ('Abonamenty', '📺', 12),
+  ('Rozwój/szkolenia', '📚', 13),
+  ('Zdrowie', '🩺', 14),
+  ('Rozrywka', '🎮', 15),
+  ('Inne', '📦', 16)
+on conflict (name) do nothing;
 
 -- ---------- one-off expenses ----------
 create table if not exists public.expenses (
@@ -34,6 +64,7 @@ create table if not exists public.expenses (
   category text not null,
   "desc" text not null default '',
   amount numeric not null default 0,
+  icon text, -- overrides the category's default icon when set
   created_at timestamptz not null default now()
 );
 
@@ -47,10 +78,11 @@ create table if not exists public.recurring_expenses (
   category text not null,
   "desc" text not null default '',
   amount numeric not null default 0,
-  day_of_month smallint not null default 1 check (day_of_month between 1 and 28),
+  day_of_month smallint not null default 1 check (day_of_month between 1 and 31),
   start_month text not null,
   end_month text,
   skip_months text[] not null default '{}',
+  icon text, -- overrides the category's default icon when set
   created_at timestamptz not null default now()
 );
 
@@ -81,6 +113,7 @@ create index if not exists idx_savings_entries_zone on public.savings_entries(zo
 -- only ever read/write their own zones and the records hanging off them.
 
 alter table public.zones enable row level security;
+alter table public.categories enable row level security;
 alter table public.incomes enable row level security;
 alter table public.expenses enable row level security;
 alter table public.recurring_expenses enable row level security;
@@ -89,6 +122,9 @@ alter table public.savings_entries enable row level security;
 
 create policy "zones: owner full access" on public.zones
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy "categories: read for authenticated" on public.categories
+  for select to authenticated using (true);
 
 create policy "incomes: owner full access" on public.incomes
   for all using (exists (select 1 from public.zones z where z.id = zone_id and z.user_id = auth.uid()))

@@ -20,6 +20,7 @@ export interface Income {
   hours: number;
   amount: number;
   desc: string;
+  icon: string | null; // overrides INCOME_TYPE_ICONS[type] when set
 }
 
 export interface Expense {
@@ -29,6 +30,7 @@ export interface Expense {
   category: string;
   desc: string;
   amount: number;
+  icon: string | null; // overrides the category's default icon when set
 }
 
 export interface RecurringExpense {
@@ -41,6 +43,8 @@ export interface RecurringExpense {
   start_month: string; // "YYYY-MM"
   end_month: string | null; // forward-only cutoff — months >= end_month are excluded
   skip_months: string[]; // one-off exceptions
+  icon: string | null; // overrides the category's default icon when set
+  created_at: string;
 }
 
 export interface SavingsEntry {
@@ -64,30 +68,13 @@ export interface RecurringOccurrence {
   category: string;
   desc: string;
   amount: number;
+  icon: string | null;
   recurring: true;
   templateId: string;
   month: string;
 }
 
 export type AnyExpense = Expense | RecurringOccurrence;
-
-export const CATEGORIES = [
-  "ZUS",
-  "Podatek",
-  "VAT",
-  "Mieszkanie/czynsz",
-  "Rachunki (prąd, internet)",
-  "Jedzenie",
-  "Transport/paliwo",
-  "Sprzęt/oprogramowanie",
-  "Księgowość",
-  "Ubezpieczenie",
-  "Abonamenty",
-  "Rozwój/szkolenia",
-  "Zdrowie",
-  "Rozrywka",
-  "Inne",
-] as const;
 
 export const MONTHS = [
   "Styczeń",
@@ -104,10 +91,34 @@ export const MONTHS = [
   "Grudzień",
 ];
 
+// Genitive case ("od stycznia", "do grudnia") — used after prepositions like "od"/"do".
+export const MONTHS_GENITIVE = [
+  "stycznia",
+  "lutego",
+  "marca",
+  "kwietnia",
+  "maja",
+  "czerwca",
+  "lipca",
+  "sierpnia",
+  "września",
+  "października",
+  "listopada",
+  "grudnia",
+];
+
 export const INCOME_TYPE_LABELS: Record<IncomeType, string> = {
   b2b: "Faktura B2B",
   uop: "Umowa o pracę (UoP)",
   uz: "Umowa zlecenie (UZ)",
   uod: "Umowa o dzieło (UoD)",
   inne: "Inny przychód",
+};
+
+export const INCOME_TYPE_ICONS: Record<IncomeType, string> = {
+  b2b: "🧾",
+  uop: "💼",
+  uz: "📝",
+  uod: "🛠️",
+  inne: "✨",
 };

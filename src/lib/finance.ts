@@ -3,6 +3,7 @@ import {
   Expense,
   Income,
   MONTHS,
+  MONTHS_GENITIVE,
   RecurringExpense,
   RecurringOccurrence,
   SavingsEntry,
@@ -10,6 +11,13 @@ import {
 
 export function pad2(n: number): string {
   return String(n).padStart(2, "0");
+}
+
+const DEFAULT_ICON = "📦";
+
+/** A per-entry icon override, falling back to the category/type default, then a generic fallback. */
+export function resolveIcon(entryIcon: string | null | undefined, defaultIcon: string | undefined): string {
+  return entryIcon || defaultIcon || DEFAULT_ICON;
 }
 
 export function fmt(n: number, dec = 0): string {
@@ -25,6 +33,12 @@ export function fmt(n: number, dec = 0): string {
 export function monthLabel(key: string): string {
   const [y, m] = key.split("-");
   return `${MONTHS[parseInt(m, 10) - 1]} ${y}`;
+}
+
+/** Genitive form for use after "od"/"do", e.g. "od sierpnia 2026". */
+export function monthLabelGenitive(key: string): string {
+  const [y, m] = key.split("-");
+  return `${MONTHS_GENITIVE[parseInt(m, 10) - 1]} ${y}`;
 }
 
 export function monthShort(key: string): string {
@@ -43,12 +57,28 @@ export function nextMonth(m: string): string {
   return `${y}-${pad2(mo)}`;
 }
 
+export function prevMonth(m: string): string {
+  const [yStr, moStr] = m.split("-");
+  let y = parseInt(yStr, 10);
+  let mo = parseInt(moStr, 10) - 1;
+  if (mo < 1) {
+    mo = 12;
+    y--;
+  }
+  return `${y}-${pad2(mo)}`;
+}
+
 export function todayStr(d = new Date()): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
 export function currentMonthStr(d = new Date()): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
+}
+
+export function daysInMonth(monthKey: string): number {
+  const [yStr, mStr] = monthKey.split("-");
+  return new Date(parseInt(yStr, 10), parseInt(mStr, 10), 0).getDate();
 }
 
 /** Expands one recurring template into an occurrence for `monthKey`, honoring
@@ -66,10 +96,12 @@ export function recurringForMonth(
     )
     .map((r) => ({
       id: `rec_${r.id}_${monthKey}`,
-      date: `${monthKey}-${pad2(r.day_of_month)}`,
+      // Clamp to the month's last day — e.g. a day-31 template still fires in February.
+      date: `${monthKey}-${pad2(Math.min(r.day_of_month, daysInMonth(monthKey)))}`,
       category: r.category,
       desc: r.desc,
       amount: r.amount,
+      icon: r.icon,
       recurring: true as const,
       templateId: r.id,
       month: monthKey,

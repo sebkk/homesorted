@@ -49,11 +49,22 @@ const TABS: { id: FinanceTab; label: string; icon: React.ReactNode }[] = [
 ];
 
 export function FinanceTabbar({ active, onChange }: { active: FinanceTab; onChange: (tab: FinanceTab) => void }) {
+  const activeIndex = TABS.findIndex((t) => t.id === active);
   return (
     <nav
       className="absolute left-4 right-4 z-20 bg-nav-bg glass border border-border rounded-xl flex p-[7px_8px] shadow-glass"
       style={{ bottom: "calc(14px + env(safe-area-inset-bottom, 0px))" }}
     >
+      <div
+        aria-hidden
+        className="absolute rounded-md bg-accent-soft transition-[left] duration-200 ease-out"
+        style={{
+          top: "7px",
+          bottom: "7px",
+          left: `calc(8px + (100% - 16px) * ${activeIndex} / ${TABS.length})`,
+          width: `calc((100% - 16px) / ${TABS.length})`,
+        }}
+      />
       {TABS.map((tab) => {
         const isActive = tab.id === active;
         return (
@@ -61,8 +72,8 @@ export function FinanceTabbar({ active, onChange }: { active: FinanceTab; onChan
             key={tab.id}
             type="button"
             onClick={() => onChange(tab.id)}
-            className={`flex-1 flex flex-col items-center gap-[3px] border-none font-sans text-[10.5px] font-semibold py-1.5 px-1 rounded-md ${
-              isActive ? "text-accent bg-accent-soft font-bold" : "text-ink bg-transparent"
+            className={`relative flex-1 flex flex-col items-center gap-[3px] border-none font-sans text-[10.5px] font-semibold py-1.5 px-1 rounded-md transition-colors duration-200 ${
+              isActive ? "text-accent font-bold" : "text-ink bg-transparent"
             }`}
           >
             <svg

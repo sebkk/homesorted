@@ -2,19 +2,22 @@
 
 import { useZoneData } from "@/lib/useZoneData";
 import { fmt, savingsBalance } from "@/lib/finance";
+import { SavingsEntry } from "@/lib/types";
 import { useToast } from "@/components/ui/Toast";
-import { TrashIcon } from "@/components/finance/icons";
+import { TrashIcon, PencilIcon } from "@/components/finance/icons";
 
 export function SavingsTab({
   zd,
   onEditInitial,
+  onEditEntry,
 }: {
   zd: ReturnType<typeof useZoneData>;
   onEditInitial: () => void;
+  onEditEntry: (entry: SavingsEntry) => void;
 }) {
   const { showToast } = useToast();
   const balance = savingsBalance(zd.savingsInitial, zd.savingsEntries);
-  const entries = [...zd.savingsEntries].sort((a, b) => (a.date < b.date ? 1 : -1));
+  const entries = [...zd.savingsEntries].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 
   async function handleDelete(id: string) {
     const removed = await zd.deleteSavingsEntry(id);
@@ -66,6 +69,14 @@ export function SavingsTab({
                   {good ? "+" : "−"}
                   {fmt(Math.abs(e.amount))}
                 </div>
+                <button
+                  type="button"
+                  aria-label="Edytuj"
+                  onClick={() => onEditEntry(e)}
+                  className="shrink-0 w-7 h-7 rounded-md border-none bg-transparent text-ink-faint flex items-center justify-center hover:bg-accent-soft hover:text-accent"
+                >
+                  <PencilIcon />
+                </button>
                 <button
                   type="button"
                   aria-label="Usuń"

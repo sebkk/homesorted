@@ -149,7 +149,7 @@ export function BalanceChart({
 			</div>
 			{tip && (
 				<div
-					className='absolute pointer-events-none z-[5] bg-ink text-surface text-[11.5px] font-semibold px-2.5 py-1.5 rounded-md whitespace-nowrap tabular-nums'
+					className='absolute pointer-events-none z-[5] bg-[#141a20] text-white text-[11.5px] font-semibold px-2.5 py-1.5 rounded-md whitespace-nowrap tabular-nums'
 					style={{
 						left: tip.x,
 						top: tip.y,
