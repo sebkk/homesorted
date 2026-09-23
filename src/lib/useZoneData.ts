@@ -126,7 +126,7 @@ export function useZoneData(zoneId: string | null) {
    * earlier months (and their historical totals) are untouched. */
   async function disableRecurringFrom(templateId: string, monthKey: string) {
     const tpl = recurring.find((r) => r.id === templateId);
-    if (!tpl) return tpl?.end_month ?? null;
+    if (!tpl) return null;
     const prevEnd = tpl.end_month;
     const nextEnd = !prevEnd || monthKey < prevEnd ? monthKey : prevEnd;
     setRecurring((prev) => prev.map((r) => (r.id === templateId ? { ...r, end_month: nextEnd } : r)));

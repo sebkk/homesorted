@@ -5,13 +5,13 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
 export async function signOut() {
-  const supabase = createClient();
+  const supabase = await createClient();
   await supabase.auth.signOut();
   redirect("/login");
 }
 
 export async function createZone(name: string) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -32,7 +32,7 @@ export async function createZone(name: string) {
 }
 
 export async function togglePinZone(zoneId: string, pinned: boolean) {
-  const supabase = createClient();
+  const supabase = await createClient();
   await supabase.from("zones").update({ pinned }).eq("id", zoneId);
   revalidatePath("/launcher");
   revalidatePath("/zones");

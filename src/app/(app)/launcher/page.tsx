@@ -15,7 +15,7 @@ const CAT_VARS = [
 ];
 
 export default async function LauncherPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

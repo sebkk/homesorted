@@ -22,7 +22,7 @@ create table if not exists public.incomes (
   type text not null default 'b2b' check (type in ('b2b','uop','uz','uod','inne')),
   hours numeric not null default 0,
   amount numeric not null default 0,
-  desc text not null default '',
+  "desc" text not null default '',
   created_at timestamptz not null default now()
 );
 
@@ -32,7 +32,7 @@ create table if not exists public.expenses (
   zone_id uuid not null references public.zones(id) on delete cascade,
   date date not null,
   category text not null,
-  desc text not null default '',
+  "desc" text not null default '',
   amount numeric not null default 0,
   created_at timestamptz not null default now()
 );
@@ -45,7 +45,7 @@ create table if not exists public.recurring_expenses (
   id uuid primary key default gen_random_uuid(),
   zone_id uuid not null references public.zones(id) on delete cascade,
   category text not null,
-  desc text not null default '',
+  "desc" text not null default '',
   amount numeric not null default 0,
   day_of_month smallint not null default 1 check (day_of_month between 1 and 28),
   start_month text not null,
@@ -64,7 +64,7 @@ create table if not exists public.savings_entries (
   id uuid primary key default gen_random_uuid(),
   zone_id uuid not null references public.zones(id) on delete cascade,
   date date not null,
-  desc text not null default '',
+  "desc" text not null default '',
   amount numeric not null default 0, -- negative = withdrawal
   created_at timestamptz not null default now()
 );

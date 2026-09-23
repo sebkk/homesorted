@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 // already redirects signed-out users to /login, so if we get here we're
 // either signed in (send to /launcher) or middleware hasn't run yet.
 export default async function RootPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
