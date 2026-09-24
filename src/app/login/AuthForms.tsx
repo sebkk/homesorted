@@ -51,8 +51,8 @@ export function AuthForms({ notice }: { notice: LoginNotice }) {
   const [prefillEmail, setPrefillEmail] = useState("");
 
   return (
-    <div className="flex-1 flex flex-col justify-center gap-4 px-7 py-8 overflow-y-auto relative">
-      <LanguageSwitch className="absolute top-4 right-4" />
+    <div className="flex-1 flex flex-col justify-center gap-4 px-7 pt-[calc(2rem+env(safe-area-inset-top))] pb-[calc(2rem+env(safe-area-inset-bottom))] overflow-y-auto relative">
+      <LanguageSwitch className="absolute right-4 top-[calc(1rem+env(safe-area-inset-top))]" />
       <div className="flex flex-col items-center gap-2.5 mb-2 text-center">
         <Logo size={44} />
         <div className="text-xl font-bold tracking-tight">HomeSorted</div>

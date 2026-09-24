@@ -31,7 +31,9 @@ const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    statusBarStyle: "black",
+    // Installed iOS app: content runs under the status bar; screens pad for it
+    // with env(safe-area-inset-top).
+    statusBarStyle: "black-translucent",
     title: "HomeSorted",
   },
 };
@@ -40,7 +42,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#0d1114",
+  themeColor: "#282b2e", // = --app-bg in globals.css
   colorScheme: "dark",
 };
 
@@ -49,7 +51,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang={locale} className={ibmPlexSans.variable}>
       <body className="font-sans flex justify-center">
-        <div className="w-full max-w-[480px] min-h-dvh md:min-h-[min(860px,calc(100dvh-48px))] md:my-6 md:rounded-[20px] md:overflow-hidden bg-surface glass border border-border shadow-glass relative flex flex-col">
+        <div className="w-full max-w-[480px] min-h-dvh md:min-h-[min(860px,calc(100dvh-48px))] md:my-6 md:rounded-[20px] md:overflow-hidden md:bg-surface glass md:border md:border-border md:shadow-glass relative flex flex-col">
           <NextIntlClientProvider>
             <ToastProvider>{children}</ToastProvider>
           </NextIntlClientProvider>

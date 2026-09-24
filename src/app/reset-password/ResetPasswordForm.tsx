@@ -38,7 +38,7 @@ export function ResetPasswordForm({ email }: { email: string }) {
   }
 
   return (
-    <div className="flex-1 flex flex-col justify-center gap-4 px-7 py-8 overflow-y-auto">
+    <div className="flex-1 flex flex-col justify-center gap-4 px-7 pt-[calc(2rem+env(safe-area-inset-top))] pb-[calc(2rem+env(safe-area-inset-bottom))] overflow-y-auto">
       <div className="flex flex-col items-center gap-2.5 mb-2 text-center">
         <Logo size={44} />
         <div className="text-xl font-bold tracking-tight">{t("title")}</div>

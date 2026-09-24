@@ -10,7 +10,7 @@ export async function generateMetadata() {
 export default async function NotFound() {
   const t = await getTranslations("errorPages");
   return (
-    <div className="flex-1 flex flex-col items-center justify-center gap-3 px-7 py-8 text-center">
+    <div className="flex-1 flex flex-col items-center justify-center gap-3 px-7 pt-[calc(2rem+env(safe-area-inset-top))] pb-[calc(2rem+env(safe-area-inset-bottom))] text-center">
       <Logo size={44} />
       <div className="font-mono text-[13px] font-semibold text-ink-faint tracking-wider">404</div>
       <h1 className="text-xl font-bold tracking-tight">{t("notFoundTitle")}</h1>

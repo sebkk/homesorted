@@ -15,7 +15,7 @@ export default function ErrorPage({ error, reset }: { error: Error & { digest?: 
   }, [error]);
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center gap-3 px-7 py-8 text-center">
+    <div className="flex-1 flex flex-col items-center justify-center gap-3 px-7 pt-[calc(2rem+env(safe-area-inset-top))] pb-[calc(2rem+env(safe-area-inset-bottom))] text-center">
       <Logo size={44} />
       <h1 className="text-xl font-bold tracking-tight">{t("errorTitle")}</h1>
       <p className="text-[13px] text-ink-muted leading-relaxed max-w-[280px]">{t("errorBody")}</p>

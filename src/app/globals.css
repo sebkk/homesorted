@@ -5,6 +5,11 @@
 /* ---------- Design tokens (dark only) ---------- */
 :root {
   --bg: #0d1114;
+  /* Solid equivalent of the frame surface (--surface over the page gradient).
+     On phones the frame fills the screen, so the page, the status bar and the
+     browser bars all use this instead — keep it equal to themeColor in
+     src/app/layout.tsx and public/manifest.json. */
+  --app-bg: #282b2e;
   --surface: rgba(255, 255, 255, 0.08);
   --surface-2: rgba(255, 255, 255, 0.05);
   --surface-3: rgba(255, 255, 255, 0.075);
@@ -65,6 +70,14 @@ body {
   background-attachment: fixed;
   background-color: var(--bg);
   color: var(--ink);
+}
+
+/* Phones: no floating frame — the app runs edge to edge on one solid colour,
+   so nothing darker shows above (status bar) or below (home indicator). */
+@media (max-width: 767px) {
+  body {
+    background: var(--app-bg);
+  }
 }
 
 /* Shared glass surface helper — apply alongside a bg-* utility */
