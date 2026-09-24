@@ -4,7 +4,8 @@ import { useTranslations } from "next-intl";
 import { useIncomeTypeLabel, useMonthFormat } from "@/i18n/useFormat";
 import { useZoneData } from "@/lib/useZoneData";
 import { useMoney } from "@/components/finance/MoneyContext";
-import { allMonthsSorted, grossAmount, grossBase, incomesForMonth, monthIncomeNet, monthIncomeTotal, resolveIcon } from "@/lib/finance";
+import { allMonthsSorted, grossAmount, grossBase, incomesForMonth, monthIncomeTotal, monthVat, netAfterVat, resolveIcon } from "@/lib/finance";
+import { useCategories } from "@/lib/useCategories";
 import { Income, INCOME_TYPE_ICONS, RecurringIncome } from "@/lib/types";
 import { useToast } from "@/components/ui/Toast";
 import { TrashIcon, PencilIcon, RecurringIcon } from "@/components/finance/icons";
@@ -32,7 +33,11 @@ export function IncomesTab({
   const { month: monthName, monthIn } = useMonthFormat();
   const { fmt, currency } = useMoney();
   const { showToast } = useToast();
-  const { incomes, recurringIncomes } = zd;
+  const { incomes, recurringIncomes, expenses, recurring } = zd;
+  const categories = useCategories();
+  // "Netto" follows the month's VAT: the VAT actually paid (VAT-category
+  // expenses, already reduced by deductions) when recorded, else the invoices'.
+  const vatOf = (m: string) => monthVat(incomes, recurringIncomes, expenses, recurring, m, categories.roleOf);
 
   const months = allMonthsSorted(incomes, [], recurringIncomes, currentMonth)
     .reverse()
@@ -42,7 +47,7 @@ export function IncomesTab({
   const yearTotals = (year: string) => {
     const inYear = months.filter((m) => m.startsWith(year));
     const total = inYear.reduce((s, m) => s + monthIncomeTotal(incomes, recurringIncomes, m), 0);
-    const net = inYear.reduce((s, m) => s + monthIncomeNet(incomes, recurringIncomes, m), 0);
+    const net = inYear.reduce((s, m) => s + monthIncomeTotal(incomes, recurringIncomes, m) - vatOf(m).vat, 0);
     return { total, months: inYear.length, extra: net !== total ? t("net", { amount: fmt(net) }) : undefined };
   };
 
@@ -102,13 +107,15 @@ export function IncomesTab({
       ) : (
         months.map((m) => {
           const items = incomesForMonth(incomes, recurringIncomes, m);
+          const { factor } = vatOf(m);
           return (
             <MonthGroup key={m} month={m} total={items.reduce((s, x) => s + grossBase(x), 0)}>
               {items.map((e) => {
                 const isRecurring = "recurring" in e;
                 const subParts: string[] = [];
-                if (e.vat_rate > 0) subParts.push(t("net", { amount: fmt(e.amount, 2, e.currency) }));
-                if (e.hours) subParts.push(t(e.vat_rate > 0 ? "hourlyExVat" : "hourly", { hours: e.hours, rate: fmt(e.amount / e.hours, 2, e.currency) }));
+                const net = netAfterVat(e, factor);
+                if (e.vat_rate > 0) subParts.push(t("net", { amount: fmt(net, 2, e.currency) }));
+                if (e.hours) subParts.push(t(e.vat_rate > 0 ? "hourlyExVat" : "hourly", { hours: e.hours, rate: fmt(net / e.hours, 2, e.currency) }));
                 if (e.desc && (e.type !== "b2b" || isRecurring)) subParts.push(e.desc);
                 return (
                   <div key={e.id} className="bg-surface-2 border border-border rounded-md p-3 flex items-center gap-3">

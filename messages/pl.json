@@ -158,7 +158,7 @@
     "earnedGross": "Zarobki (z VAT)",
     "spent": "Wydatki",
     "leftOver": "Zostaje na czysto",
-    "afterVat": "po odjęciu VAT {vat}",
+    "afterVat": "po odjęciu VAT {vat}{source, select, paid { (zapłacony)} other { (z faktur)}}",
     "savings": "Oszczędności",
     "rateBeforeTax": "{symbol}/h bez VAT",
     "rateBeforeTaxNote": "{hours} h, przed ZUS i podatkiem",
@@ -176,7 +176,7 @@
     "positive": "Na plusie",
     "negative": "Na minusie",
     "breakdown": "Zarobek {earned} − wydatki {spent}",
-    "breakdownVat": "Zarobek {earned} − VAT {vat} − wydatki {spent}",
+    "breakdownVat": "Zarobek {earned} − VAT {vat}{source, select, paid { (zapłacony)} other {}} − wydatki {spent}",
     "addIncome": "Zarobek",
     "addExpense": "Wydatek",
     "beforeTaxNote": "przed ZUS i podatkiem",
@@ -201,8 +201,11 @@
     "income": "Zarobek",
     "expenses": "Wydatki",
     "savings": "Oszczędności",
-    "aria": "{month}: zarobek {income}, wydatki {expense}, oszczędności {saving}",
-    "openStats": "Otwórz statystyki miesiąca."
+    "aria": "{month}: zarobek {income}, wydatki {expense}, oszczędności {saving}, zostało {left}",
+    "openStats": "Otwórz statystyki miesiąca.",
+    "leftover": "Zostało z zarobku",
+    "overIncome": "Ponad zarobek",
+    "caption": "Cały słupek = zarobek miesiąca. Kreska pokazuje zarobek, gdy wydatki go przekroczyły."
   },
   "expenses": {
     "recurringTitle": "Wydatki stałe (co miesiąc)",
@@ -287,25 +290,144 @@
     "pantry": "Magazyn",
     "pantryDesc": "Stan zapasów w mieszkaniu",
     "soon": "Wkrótce",
-    "signOut": "Wyloguj się"
+    "signOut": "Wyloguj się",
+    "profile": "Profil"
   },
   "login": {
-    "noAccount": "Nie znaleziono konta z tym hasłem. Jeśli to Twój pierwszy raz, podaj imię i załóż konto poniżej.",
-    "intro": "Podaj adres e-mail, aby się zalogować lub założyć konto.",
+    "signInIntro": "Zaloguj się, aby ogarnąć swoje finanse.",
+    "signUpIntro": "Załóż konto — zajmie to chwilę.",
+    "checkInboxTitle": "Prawie gotowe!",
     "email": "Adres e-mail",
     "emailPlaceholder": "ty@przyklad.pl",
-    "next": "Dalej",
-    "change": "Zmień",
     "name": "Imię",
     "namePlaceholder": "np. Kuba",
     "password": "Hasło",
-    "signUp": "Załóż konto",
+    "passwordConfirm": "Powtórz hasło",
+    "passwordHint": "Co najmniej {min} znaków.",
     "signIn": "Zaloguj się",
-    "footer": "Twoje dane trzymane są w Supabase i zsynchronizują się między urządzeniami."
+    "signingIn": "Logowanie…",
+    "signUp": "Zarejestruj się",
+    "signingUp": "Tworzenie konta…",
+    "noAccountQuestion": "Nie masz jeszcze konta?",
+    "haveAccountQuestion": "Masz już konto?",
+    "accountCreated": "Konto zostało utworzone.",
+    "checkInboxBody": "Wysłaliśmy link potwierdzający na <b>{email}</b>. Kliknij go, aby aktywować konto — potem się zalogujesz.",
+    "checkInboxHint": "Nie widzisz wiadomości? Sprawdź folder spam albo",
+    "resend": "wyślij link ponownie",
+    "resending": "wysyłanie…",
+    "resendSent": "Wysłano ponownie ✓",
+    "backToSignIn": "Wróć do logowania",
+    "footer": "Twoje dane trzymane są w Supabase i zsynchronizują się między urządzeniami.",
+    "notices": {
+      "confirmed": "Adres e-mail potwierdzony. Możesz się zalogować.",
+      "confirmError": "Link potwierdzający wygasł lub jest nieprawidłowy. Zaloguj się, a wyślemy nowy."
+    },
+    "validation": {
+      "emailRequired": "Podaj adres e-mail.",
+      "emailInvalid": "To nie wygląda na poprawny adres e-mail.",
+      "passwordRequired": "Podaj hasło.",
+      "passwordTooShort": "Hasło musi mieć co najmniej {min} znaków.",
+      "passwordConfirmRequired": "Powtórz hasło.",
+      "passwordMismatch": "Hasła nie są takie same.",
+      "nameRequired": "Podaj imię.",
+      "nameTooLong": "Imię może mieć maksymalnie 50 znaków."
+    },
+    "errors": {
+      "invalidCredentials": "Nieprawidłowy e-mail lub hasło.",
+      "emailNotConfirmed": "Najpierw potwierdź adres e-mail — kliknij link, który wysłaliśmy po rejestracji.",
+      "alreadyRegistered": "Konto z tym adresem już istnieje.",
+      "weakPassword": "Hasło jest za słabe. Użyj dłuższego hasła.",
+      "rateLimit": "Za dużo prób. Spróbuj ponownie za kilka minut.",
+      "network": "Brak połączenia z serwerem. Sprawdź internet i spróbuj ponownie.",
+      "generic": "Coś poszło nie tak. Spróbuj ponownie."
+    }
   },
   "yearSummary": {
     "prev": "Poprzedni rok",
     "next": "Następny rok",
     "average": "średnio {amount}/mies. ({count, plural, one {# miesiąc} few {# miesiące} many {# miesięcy} other {# miesiąca}})"
+  },
+  "encryption": {
+    "bannerTitle": "Zaszyfruj swoje dane",
+    "bannerBody": "Kwoty, godziny i opisy będą czytelne tylko dla Ciebie — nawet w bazie danych.",
+    "bannerEnable": "Włącz szyfrowanie",
+    "bannerLater": "Może później",
+    "setupTitle": "Szyfrowanie danych",
+    "introBody": "Ustawisz hasło szyfrujące. Od teraz kwoty, godziny i opisy będą zaszyfrowane, zanim opuszczą to urządzenie.",
+    "introEncrypted": "Zaszyfrowane: kwoty, godziny, opisy, stan początkowy oszczędności, limity budżetów.",
+    "introRecovery": "Dostaniesz jednorazowy kod odzyskiwania — działa zamiast hasła, gdy je zapomnisz.",
+    "introWarning": "Bez hasła i bez kodu odzyskiwania danych nie da się odzyskać — nawet przez nas.",
+    "continue": "Dalej",
+    "newPassword": "Hasło szyfrujące",
+    "confirmPassword": "Powtórz hasło",
+    "passwordTooShort": "Hasło musi mieć co najmniej 8 znaków.",
+    "passwordMismatch": "Hasła nie są takie same.",
+    "setupFailed": "Nie udało się włączyć szyfrowania. Spróbuj ponownie.",
+    "preparing": "Przygotowuję…",
+    "recoveryTitle": "Zapisz kod odzyskiwania",
+    "recoveryBody": "To jedyny moment, gdy zobaczysz ten kod. Zapisz go w menedżerze haseł lub w bezpiecznym miejscu — pozwoli odzyskać dane, jeśli zapomnisz hasła.",
+    "savedConfirm": "Zapisałem/am kod odzyskiwania w bezpiecznym miejscu.",
+    "enableNow": "Zaszyfruj dane",
+    "migratingTitle": "Szyfruję dane…",
+    "migratingBody": "To może chwilę potrwać — nie zamykaj tego okna.",
+    "doneTitle": "Gotowe",
+    "doneBody": "Twoje dane są już zaszyfrowane. Za każdym razem po otwarciu aplikacji na nowym urządzeniu lub po odświeżeniu strony poprosimy o hasło.",
+    "done": "Zamknij",
+    "unlockTitle": "Odblokuj dane",
+    "unlockIntro": "Podaj hasło szyfrujące, żeby zobaczyć swoje dane finansowe.",
+    "password": "Hasło szyfrujące",
+    "unlock": "Odblokuj",
+    "wrongPassword": "Niepoprawne hasło.",
+    "forgotPassword": "Zapomniałem/am hasła",
+    "recoveryIntro": "Podaj kod odzyskiwania, który zapisałeś/aś przy włączaniu szyfrowania.",
+    "recoveryCode": "Kod odzyskiwania",
+    "recover": "Odzyskaj dostęp",
+    "wrongRecoveryCode": "Niepoprawny kod odzyskiwania.",
+    "backToPassword": "Wróć do hasła",
+    "newPasswordIntro": "Dostęp odzyskany. Ustaw nowe hasło szyfrujące.",
+    "saveNewPassword": "Zapisz nowe hasło",
+    "lockNow": "Zablokuj teraz"
+  },
+  "profile": {
+    "title": "Profil",
+    "saving": "Zapisywanie…",
+    "account": {
+      "title": "Konto",
+      "email": "Adres e-mail",
+      "name": "Imię",
+      "save": "Zapisz imię",
+      "saved": "Imię zostało zapisane."
+    },
+    "password": {
+      "title": "Hasło do konta",
+      "current": "Obecne hasło",
+      "new": "Nowe hasło",
+      "confirm": "Powtórz nowe hasło",
+      "hint": "Co najmniej {min} znaków.",
+      "submit": "Zmień hasło",
+      "changed": "Hasło zostało zmienione. Użyj go przy następnym logowaniu."
+    },
+    "encryption": {
+      "title": "Hasło szyfrujące",
+      "intro": "Osobne hasło, którym odblokowujesz zaszyfrowane dane. Zmiana nie wpływa na kod odzyskiwania — nadal działa.",
+      "submit": "Zmień hasło szyfrujące",
+      "changed": "Hasło szyfrujące zostało zmienione."
+    },
+    "validation": {
+      "nameRequired": "Podaj imię.",
+      "nameTooLong": "Imię może mieć maksymalnie 50 znaków.",
+      "currentRequired": "Podaj obecne hasło.",
+      "newRequired": "Podaj nowe hasło.",
+      "tooShort": "Hasło musi mieć co najmniej {min} znaków.",
+      "sameAsCurrent": "Nowe hasło musi się różnić od obecnego.",
+      "confirmRequired": "Powtórz nowe hasło.",
+      "mismatch": "Hasła nie są takie same."
+    },
+    "errors": {
+      "wrongCurrent": "Obecne hasło jest nieprawidłowe.",
+      "weak": "Hasło jest za słabe. Użyj dłuższego hasła.",
+      "rateLimit": "Za dużo prób. Spróbuj ponownie za kilka minut.",
+      "generic": "Nie udało się zapisać. Spróbuj ponownie."
+    }
   }
 }

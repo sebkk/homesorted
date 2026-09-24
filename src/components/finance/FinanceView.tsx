@@ -13,13 +13,17 @@ import { ExpensesTab } from "@/components/finance/ExpensesTab";
 import { SavingsTab } from "@/components/finance/SavingsTab";
 import { FinanceSheets, SheetState } from "@/components/finance/FinanceSheets";
 import { MoneyProvider } from "@/components/finance/MoneyContext";
+import { Logo } from "@/components/ui/Logo";
+import { useEncryption } from "@/components/encryption/EncryptionContext";
+import { EncryptionLockButton } from "@/components/encryption/EncryptionLockButton";
 
 export function FinanceView({ zoneId, zoneName, zoneCurrency }: { zoneId: string; zoneName: string; zoneCurrency: string }) {
   const t = useTranslations("finance");
   const [tab, setTab] = useState<FinanceTab>("dashboard");
   const [sheet, setSheet] = useState<SheetState>(null);
   const currentMonth = currentMonthStr();
-  const zd = useZoneData(zoneId, zoneCurrency, currentMonth);
+  const { dek } = useEncryption();
+  const zd = useZoneData(zoneId, zoneCurrency, currentMonth, dek);
 
   return (
     <MoneyProvider currency={zoneCurrency}>
@@ -29,23 +33,23 @@ export function FinanceView({ zoneId, zoneName, zoneCurrency }: { zoneId: string
         style={{ paddingTop: "calc(14px + env(safe-area-inset-top, 0px))", paddingBottom: "12px" }}
       >
         <div className="flex items-center gap-2.5">
-          <svg width={26} height={26} viewBox="0 0 26 26" fill="none">
-            <rect x="1" y="1" width="24" height="24" rx="7" fill="var(--accent)" />
-            <path d="M7 17.5L10.5 12L13.5 15L19 8" stroke="var(--accent-ink)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          <Logo size={26} />
           <span className="font-bold text-[16px] tracking-tight">{zoneName}</span>
           <span className="text-[11px] font-semibold text-ink-muted bg-surface-2 border border-border rounded-full px-2 py-0.5">{zoneCurrency}</span>
         </div>
-        <Link
-          href="/launcher"
-          aria-label={t("backToLauncher")}
-          className="w-8 h-8 rounded-md border border-border bg-surface-2 text-ink-muted flex items-center justify-center"
-        >
-          <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3 11l9-8 9 8" />
-            <path d="M5 10v10h14V10" />
-          </svg>
-        </Link>
+        <div className="flex items-center gap-1.5">
+          <EncryptionLockButton />
+          <Link
+            href="/launcher"
+            aria-label={t("backToLauncher")}
+            className="w-8 h-8 rounded-md border border-border bg-surface-2 text-ink-muted flex items-center justify-center"
+          >
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 11l9-8 9 8" />
+              <path d="M5 10v10h14V10" />
+            </svg>
+          </Link>
+        </div>
       </header>
 
       <main className="flex-1 min-h-0 overflow-y-auto px-5 pt-4" style={{ paddingBottom: "112px" }}>

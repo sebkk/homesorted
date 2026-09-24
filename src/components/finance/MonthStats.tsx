@@ -62,7 +62,7 @@ export function MonthStats({
   const earned = monthIncomeTotal(incomes, recurringIncomes, month);
   const spent = monthExpenseTotal(expenses, recurring, month);
   const saved = savingsForMonth(savingsEntries, month);
-  const { vat, balance } = monthBalance(incomes, recurringIncomes, expenses, recurring, month, categories.roleOf);
+  const { vat, vatSource, balance } = monthBalance(incomes, recurringIncomes, expenses, recurring, month, categories.roleOf);
   const rates = monthHourlyRates(incomes, recurringIncomes, expenses, recurring, month, categories.roleOf);
 
   // Colors follow the category, not its rank this month: the five biggest
@@ -109,7 +109,7 @@ export function MonthStats({
           label={t("leftOver")}
           value={fmt(balance)}
           tone={balance >= 0 ? "good" : "critical"}
-          note={vat > 0 ? t("afterVat", { vat: fmt(vat) }) : undefined}
+          note={vat > 0 ? t("afterVat", { vat: fmt(vat), source: vatSource }) : undefined}
         />
         <Tile label={t("savings")} value={fmt(saved)} />
         {rates.hours > 0 && (

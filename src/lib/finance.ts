@@ -205,9 +205,40 @@ function roleSum(expenses: Expense[], recurring: RecurringExpense[], monthKey: s
     .reduce((s, x) => s + baseAmount(x), 0);
 }
 
-/** "Zostaje na czysto": gross income minus the VAT on those invoices minus
- * expenses. Expenses in the VAT category are left out so VAT isn't taken
- * off twice (once from the invoices, once as a recorded payment). */
+export type VatSource = "paid" | "invoice";
+
+/** The VAT to take off a month's income. When the month has expenses in the
+ * VAT category, those are what was actually paid to the tax office — already
+ * reduced by the VAT deducted on purchases — so they're used as-is. Only when
+ * there are none does it fall back to the full VAT charged on the invoices.
+ * `factor` scales each invoice's own VAT to match (1 for "invoice"). */
+export function monthVat(
+  incomes: Income[],
+  recurringIncomes: RecurringIncome[],
+  expenses: Expense[],
+  recurring: RecurringExpense[],
+  monthKey: string,
+  roleOf: RoleOf
+): { vat: number; source: VatSource; factor: number } {
+  const invoiceVat = monthIncomeTotal(incomes, recurringIncomes, monthKey) - monthIncomeNet(incomes, recurringIncomes, monthKey);
+  const hasPaid = expensesForMonth(expenses, recurring, monthKey).some((x) => roleOf(x.category_id) === "vat");
+  if (!hasPaid) return { vat: invoiceVat, source: "invoice", factor: 1 };
+  const paid = roleSum(expenses, recurring, monthKey, roleOf, "vat");
+  return { vat: paid, source: "paid", factor: invoiceVat > 0 ? paid / invoiceVat : 0 };
+}
+
+/** An income's net value after the month's VAT, in the entry's own currency:
+ * gross minus its invoice VAT scaled by monthVat's `factor` — so it's the
+ * invoice net when no VAT payment is recorded, and reflects the VAT actually
+ * paid (after deductions) when one is. */
+export function netAfterVat(x: { amount: number; vat_rate: number }, factor: number): number {
+  const gross = grossAmount(x);
+  return gross - (gross - x.amount) * factor;
+}
+
+/** "Zostaje na czysto": gross income minus the month's VAT (see monthVat)
+ * minus expenses. Expenses in the VAT category are left out of `spent` so VAT
+ * isn't taken off twice. */
 export function monthBalance(
   incomes: Income[],
   recurringIncomes: RecurringIncome[],
@@ -217,14 +248,16 @@ export function monthBalance(
   roleOf: RoleOf
 ) {
   const gross = monthIncomeTotal(incomes, recurringIncomes, monthKey);
-  const net = monthIncomeNet(incomes, recurringIncomes, monthKey);
+  const { vat, source } = monthVat(incomes, recurringIncomes, expenses, recurring, monthKey, roleOf);
   const spent = monthExpenseTotal(expenses, recurring, monthKey) - roleSum(expenses, recurring, monthKey, roleOf, "vat");
-  return { gross, vat: gross - net, spent, balance: net - spent };
+  return { gross, vat, vatSource: source, spent, balance: gross - vat - spent };
 }
 
 /** Hourly rates from work income only (every type except "inne"), counting
  * only entries that have hours:
- * - `beforeTax`: net of VAT, before ZUS and income tax;
+ * - `beforeTax`: after VAT (the month's VAT as in monthVat — the VAT actually
+ *   paid when recorded, spread over the invoices in proportion to their VAT),
+ *   before ZUS and income tax;
  * - `takeHome`: after also subtracting the month's ZUS and income-tax expenses
  *   (categories with role "zus" / "income_tax"). */
 export function monthHourlyRates(
@@ -237,7 +270,8 @@ export function monthHourlyRates(
 ) {
   const work = incomesForMonth(incomes, recurringIncomes, monthKey).filter((x) => x.type !== "inne" && x.hours > 0);
   const hours = work.reduce((s, x) => s + x.hours, 0);
-  const net = work.reduce((s, x) => s + baseAmount(x), 0);
+  const { factor } = monthVat(incomes, recurringIncomes, expenses, recurring, monthKey, roleOf);
+  const net = work.reduce((s, x) => s + netAfterVat(x, factor) * (Number(x.fx_rate) || 1), 0);
   const zus = roleSum(expenses, recurring, monthKey, roleOf, "zus");
   const tax = roleSum(expenses, recurring, monthKey, roleOf, "income_tax");
   return {

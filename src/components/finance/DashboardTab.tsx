@@ -48,7 +48,7 @@ export function DashboardTab({
   const categories = useCategories();
   const earned = monthIncomeTotal(incomes, recurringIncomes, currentMonth);
   const expTotal = monthExpenseTotal(expenses, recurring, currentMonth);
-  const { vat, spent: balanceSpent, balance } = monthBalance(incomes, recurringIncomes, expenses, recurring, currentMonth, categories.roleOf);
+  const { vat, vatSource, spent: balanceSpent, balance } = monthBalance(incomes, recurringIncomes, expenses, recurring, currentMonth, categories.roleOf);
   const rates = monthHourlyRates(incomes, recurringIncomes, expenses, recurring, currentMonth, categories.roleOf);
 
   const months = allMonthsSorted(incomes, expenses, templates, currentMonth).slice(-6);
@@ -112,7 +112,7 @@ export function DashboardTab({
         </span>
         <div className="text-[11.5px] text-ink-muted mt-2.5 tabular-nums">
           {vat > 0
-            ? t("breakdownVat", { earned: fmt(earned), vat: fmt(vat), spent: fmt(balanceSpent) })
+            ? t("breakdownVat", { earned: fmt(earned), vat: fmt(vat), source: vatSource, spent: fmt(balanceSpent) })
             : t("breakdown", { earned: fmt(earned), spent: fmt(balanceSpent) })}
         </div>
       </div>

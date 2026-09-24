@@ -33,13 +33,15 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const isAuthRoute = request.nextUrl.pathname.startsWith("/login");
+  // Email confirmation links land here before the user has a session.
+  const isAuthCallback = request.nextUrl.pathname.startsWith("/auth/");
   const isPublicAsset =
     request.nextUrl.pathname.startsWith("/_next") ||
     request.nextUrl.pathname.startsWith("/manifest") ||
     request.nextUrl.pathname.startsWith("/icons") ||
     request.nextUrl.pathname.startsWith("/sw.js");
 
-  if (!user && !isAuthRoute && !isPublicAsset && request.nextUrl.pathname !== "/") {
+  if (!user && !isAuthRoute && !isAuthCallback && !isPublicAsset && request.nextUrl.pathname !== "/") {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);

@@ -17,14 +17,18 @@ create table if not exists public.zones (
 );
 
 -- ---------- incomes ----------
+-- amount/hours/"desc" are `text`, not `numeric`: once a user enables
+-- client-side encryption (src/lib/crypto.ts) they hold an opaque ciphertext
+-- blob instead of a plain value. isEncrypted() tells the two apart, so rows
+-- from before encryption was enabled keep working untouched.
 create table if not exists public.incomes (
   id uuid primary key default gen_random_uuid(),
   zone_id uuid not null references public.zones(id) on delete cascade,
   month text not null, -- 'YYYY-MM'
   invoice_date date not null, -- drives the NBP rate date
   type text not null default 'b2b' check (type in ('b2b','uop','uz','uod','inne')),
-  hours numeric not null default 0,
-  amount numeric not null default 0,
+  hours text not null default '0',
+  amount text not null default '0',
   "desc" text not null default '',
   icon text, -- overrides INCOME_TYPE_ICONS[type] (app-side) when set
   -- amount is always NET; gross = amount * (1 + vat_rate). Totals use net.
@@ -74,7 +78,7 @@ create table if not exists public.expenses (
   date date not null,
   category_id uuid not null references public.categories(id),
   "desc" text not null default '',
-  amount numeric not null default 0,
+  amount text not null default '0', -- ciphertext once encryption is enabled, see incomes above
   icon text, -- overrides the category's default icon when set
   created_at timestamptz not null default now()
 );
@@ -88,7 +92,7 @@ create table if not exists public.recurring_expenses (
   zone_id uuid not null references public.zones(id) on delete cascade,
   category_id uuid not null references public.categories(id),
   "desc" text not null default '',
-  amount numeric not null default 0,
+  amount text not null default '0', -- ciphertext once encryption is enabled, see incomes above
   day_of_month smallint not null default 1 check (day_of_month between 1 and 31),
   start_month text not null,
   end_month text,
@@ -104,8 +108,8 @@ create table if not exists public.recurring_incomes (
   id uuid primary key default gen_random_uuid(),
   zone_id uuid not null references public.zones(id) on delete cascade,
   type text not null default 'b2b' check (type in ('b2b','uop','uz','uod','inne')),
-  hours numeric not null default 0,
-  amount numeric not null default 0,
+  hours text not null default '0', -- ciphertext once encryption is enabled, see incomes above
+  amount text not null default '0',
   "desc" text not null default '',
   icon text,
   vat_rate numeric not null default 0 check (vat_rate >= 0 and vat_rate < 1), -- amount is net
@@ -118,7 +122,7 @@ create table if not exists public.recurring_incomes (
 -- ---------- savings ----------
 create table if not exists public.savings_state (
   zone_id uuid primary key references public.zones(id) on delete cascade,
-  initial numeric not null default 0
+  initial text not null default '0' -- ciphertext once encryption is enabled, see incomes above
 );
 
 create table if not exists public.savings_entries (
@@ -126,16 +130,17 @@ create table if not exists public.savings_entries (
   zone_id uuid not null references public.zones(id) on delete cascade,
   date date not null,
   "desc" text not null default '',
-  amount numeric not null default 0, -- negative = withdrawal
+  amount text not null default '0', -- negative = withdrawal; ciphertext once encryption is enabled
   created_at timestamptz not null default now()
 );
 
 -- ---------- monthly budgets ----------
--- One monthly limit per category per zone; applies to every month.
+-- One monthly limit per category per zone; applies to every month. The
+-- `amount > 0` invariant is enforced client-side once this holds ciphertext.
 create table if not exists public.category_budgets (
   zone_id uuid not null references public.zones(id) on delete cascade,
   category_id uuid not null references public.categories(id),
-  amount numeric not null check (amount > 0),
+  amount text not null, -- ciphertext once encryption is enabled, see incomes above
   created_at timestamptz not null default now(),
   primary key (zone_id, category_id)
 );
@@ -224,3 +229,23 @@ begin
     execute format('alter table public.%I add column if not exists fx_table text', t);
   end loop;
 end $$;
+
+-- ---------- client-side encryption ----------
+-- Each user has one random AES-256 data key. It's wrapped (encrypted) twice —
+-- once under a key derived from their encryption password, once under a key
+-- derived from a one-time recovery code — so it never reaches this table (or
+-- any Supabase log/backup) in the clear. See src/lib/crypto.ts for the
+-- cryptography and src/components/encryption/ for the setup/unlock UI.
+create table if not exists public.user_encryption (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  password_wrap text not null,
+  recovery_wrap text not null,
+  enabled_at timestamptz not null default now()
+);
+
+alter table public.user_encryption enable row level security;
+
+create policy "user_encryption: owner full access" on public.user_encryption
+  for all to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);

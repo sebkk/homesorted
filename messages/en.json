@@ -158,7 +158,7 @@
     "earnedGross": "Income (incl. VAT)",
     "spent": "Expenses",
     "leftOver": "Left over",
-    "afterVat": "after VAT {vat}",
+    "afterVat": "after VAT {vat}{source, select, paid { (paid)} other { (from invoices)}}",
     "savings": "Savings",
     "rateBeforeTax": "{symbol}/h excl. VAT",
     "rateBeforeTaxNote": "{hours} h, before ZUS and tax",
@@ -176,7 +176,7 @@
     "positive": "In the black",
     "negative": "In the red",
     "breakdown": "Income {earned} − expenses {spent}",
-    "breakdownVat": "Income {earned} − VAT {vat} − expenses {spent}",
+    "breakdownVat": "Income {earned} − VAT {vat}{source, select, paid { (paid)} other {}} − expenses {spent}",
     "addIncome": "Income",
     "addExpense": "Expense",
     "beforeTaxNote": "before ZUS and tax",
@@ -201,8 +201,11 @@
     "income": "Income",
     "expenses": "Expenses",
     "savings": "Savings",
-    "aria": "{month}: income {income}, expenses {expense}, savings {saving}",
-    "openStats": "Open month statistics."
+    "aria": "{month}: income {income}, expenses {expense}, savings {saving}, left {left}",
+    "openStats": "Open month statistics.",
+    "leftover": "Left from income",
+    "overIncome": "Over income",
+    "caption": "Full column = the month's income. The line marks income when spending went past it."
   },
   "expenses": {
     "recurringTitle": "Recurring expenses (monthly)",
@@ -287,25 +290,144 @@
     "pantry": "Pantry",
     "pantryDesc": "Household stock levels",
     "soon": "Coming soon",
-    "signOut": "Sign out"
+    "signOut": "Sign out",
+    "profile": "Profile"
   },
   "login": {
-    "noAccount": "No account found with this password. If this is your first time, enter your name and create an account below.",
-    "intro": "Enter your email address to sign in or create an account.",
+    "signInIntro": "Sign in to get your finances sorted.",
+    "signUpIntro": "Create an account — it only takes a moment.",
+    "checkInboxTitle": "Almost there!",
     "email": "Email address",
     "emailPlaceholder": "you@example.com",
-    "next": "Continue",
-    "change": "Change",
     "name": "First name",
     "namePlaceholder": "e.g. Alex",
     "password": "Password",
-    "signUp": "Create account",
+    "passwordConfirm": "Confirm password",
+    "passwordHint": "At least {min} characters.",
     "signIn": "Sign in",
-    "footer": "Your data is stored in Supabase and syncs across your devices."
+    "signingIn": "Signing in…",
+    "signUp": "Sign up",
+    "signingUp": "Creating account…",
+    "noAccountQuestion": "Don't have an account yet?",
+    "haveAccountQuestion": "Already have an account?",
+    "accountCreated": "Your account has been created.",
+    "checkInboxBody": "We sent a confirmation link to <b>{email}</b>. Click it to activate your account — then you can sign in.",
+    "checkInboxHint": "Can't see it? Check your spam folder or",
+    "resend": "resend the link",
+    "resending": "sending…",
+    "resendSent": "Sent again ✓",
+    "backToSignIn": "Back to sign in",
+    "footer": "Your data is stored in Supabase and syncs across your devices.",
+    "notices": {
+      "confirmed": "Email confirmed. You can sign in now.",
+      "confirmError": "The confirmation link has expired or is invalid. Sign in and we'll send a new one."
+    },
+    "validation": {
+      "emailRequired": "Enter your email address.",
+      "emailInvalid": "That doesn't look like a valid email address.",
+      "passwordRequired": "Enter your password.",
+      "passwordTooShort": "The password must be at least {min} characters.",
+      "passwordConfirmRequired": "Confirm your password.",
+      "passwordMismatch": "Passwords don't match.",
+      "nameRequired": "Enter your first name.",
+      "nameTooLong": "The name can be at most 50 characters."
+    },
+    "errors": {
+      "invalidCredentials": "Incorrect email or password.",
+      "emailNotConfirmed": "Confirm your email first — click the link we sent after you signed up.",
+      "alreadyRegistered": "An account with this email already exists.",
+      "weakPassword": "The password is too weak. Use a longer one.",
+      "rateLimit": "Too many attempts. Try again in a few minutes.",
+      "network": "Can't reach the server. Check your connection and try again.",
+      "generic": "Something went wrong. Please try again."
+    }
   },
   "yearSummary": {
     "prev": "Previous year",
     "next": "Next year",
     "average": "avg. {amount}/month ({count, plural, one {# month} other {# months}})"
+  },
+  "encryption": {
+    "bannerTitle": "Encrypt your data",
+    "bannerBody": "Amounts, hours and descriptions will be readable only by you — even in the database.",
+    "bannerEnable": "Enable encryption",
+    "bannerLater": "Maybe later",
+    "setupTitle": "Data encryption",
+    "introBody": "You'll set an encryption password. From now on, amounts, hours and descriptions are encrypted before they ever leave this device.",
+    "introEncrypted": "Encrypted: amounts, hours, descriptions, starting savings balance, budget limits.",
+    "introRecovery": "You'll get a one-time recovery code — it works instead of the password if you forget it.",
+    "introWarning": "Without the password or the recovery code, the data can't be recovered — not even by us.",
+    "continue": "Continue",
+    "newPassword": "Encryption password",
+    "confirmPassword": "Confirm password",
+    "passwordTooShort": "The password must be at least 8 characters.",
+    "passwordMismatch": "Passwords don't match.",
+    "setupFailed": "Couldn't enable encryption. Please try again.",
+    "preparing": "Preparing…",
+    "recoveryTitle": "Save your recovery code",
+    "recoveryBody": "This is the only time you'll see this code. Save it in a password manager or somewhere safe — it lets you recover your data if you forget your password.",
+    "savedConfirm": "I've saved the recovery code somewhere safe.",
+    "enableNow": "Encrypt my data",
+    "migratingTitle": "Encrypting your data…",
+    "migratingBody": "This can take a moment — don't close this window.",
+    "doneTitle": "Done",
+    "doneBody": "Your data is now encrypted. We'll ask for your password again on a new device or after refreshing the page.",
+    "done": "Close",
+    "unlockTitle": "Unlock your data",
+    "unlockIntro": "Enter your encryption password to see your finance data.",
+    "password": "Encryption password",
+    "unlock": "Unlock",
+    "wrongPassword": "Incorrect password.",
+    "forgotPassword": "I forgot my password",
+    "recoveryIntro": "Enter the recovery code you saved when you enabled encryption.",
+    "recoveryCode": "Recovery code",
+    "recover": "Recover access",
+    "wrongRecoveryCode": "Incorrect recovery code.",
+    "backToPassword": "Back to password",
+    "newPasswordIntro": "Access recovered. Set a new encryption password.",
+    "saveNewPassword": "Save new password",
+    "lockNow": "Lock now"
+  },
+  "profile": {
+    "title": "Profile",
+    "saving": "Saving…",
+    "account": {
+      "title": "Account",
+      "email": "Email address",
+      "name": "First name",
+      "save": "Save name",
+      "saved": "Your name has been saved."
+    },
+    "password": {
+      "title": "Account password",
+      "current": "Current password",
+      "new": "New password",
+      "confirm": "Confirm new password",
+      "hint": "At least {min} characters.",
+      "submit": "Change password",
+      "changed": "Your password has been changed. Use it the next time you sign in."
+    },
+    "encryption": {
+      "title": "Encryption password",
+      "intro": "A separate password that unlocks your encrypted data. Changing it doesn't affect your recovery code — it still works.",
+      "submit": "Change encryption password",
+      "changed": "Your encryption password has been changed."
+    },
+    "validation": {
+      "nameRequired": "Enter your first name.",
+      "nameTooLong": "The name can be at most 50 characters.",
+      "currentRequired": "Enter your current password.",
+      "newRequired": "Enter a new password.",
+      "tooShort": "The password must be at least {min} characters.",
+      "sameAsCurrent": "The new password must differ from the current one.",
+      "confirmRequired": "Confirm the new password.",
+      "mismatch": "Passwords don't match."
+    },
+    "errors": {
+      "wrongCurrent": "The current password is incorrect.",
+      "weak": "The password is too weak. Use a longer one.",
+      "rateLimit": "Too many attempts. Try again in a few minutes.",
+      "generic": "Couldn't save. Please try again."
+    }
   }
 }

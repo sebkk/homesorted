@@ -1,8 +1,9 @@
 // Minimal app-shell service worker: cache-first for static assets, always
 // network for everything else (this app's data lives in Supabase, not in
 // the cache — no point going offline-first on API calls).
-const CACHE_NAME = "homesorted-shell-v1";
-const SHELL_ASSETS = ["/manifest.json", "/icons/icon-192.png", "/icons/icon-512.png"];
+// Bump when a cached asset changes (v2: new app icon) so installed apps refresh it.
+const CACHE_NAME = "homesorted-shell-v2";
+const SHELL_ASSETS = ["/manifest.json", "/icons/icon.svg", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_ASSETS)));

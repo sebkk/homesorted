@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { LanguageSwitch } from "@/components/ui/LanguageSwitch";
+import { EncryptionSetupBanner } from "@/components/encryption/EncryptionSetup";
+import { EncryptionLockButton } from "@/components/encryption/EncryptionLockButton";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/lib/actions";
 import { Zone } from "@/lib/types";
@@ -40,9 +42,25 @@ export default async function LauncherPage() {
       >
         <div className="flex items-start justify-between gap-3">
           <div className="text-[19px] font-bold mt-1 mb-0.5 tracking-tight min-w-0 break-words">{t("hello", { name: displayName })}</div>
-          <LanguageSwitch className="shrink-0" />
+          <div className="flex items-center gap-1.5 shrink-0">
+            <EncryptionLockButton />
+            <Link
+              href="/profile"
+              aria-label={t("profile")}
+              title={t("profile")}
+              className="w-8 h-8 rounded-md border border-border bg-surface-2 text-ink-muted flex items-center justify-center shrink-0"
+            >
+              <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="8" r="4" />
+                <path d="M4 21a8 8 0 0 1 16 0" />
+              </svg>
+            </Link>
+            <LanguageSwitch />
+          </div>
         </div>
         <div className="text-[13px] text-ink-muted mb-[18px]">{t("intro")}</div>
+
+        <EncryptionSetupBanner />
 
         {pinnedZones.length > 0 && (
           <div className="mb-1">

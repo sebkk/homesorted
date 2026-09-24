@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from
 import { createClient } from "@/lib/supabase/client";
 import { CategoryBudget, Expense, Income, RecurringExpense, RecurringIncome, RecurringTemplate, SavingsEntry } from "@/lib/types";
 import { daysInMonth, isActiveInMonth, lastDayOfMonth, nextMonth, pad2 } from "@/lib/finance";
+import { decryptNumber, decryptText, encryptNumber, encryptText, isEncrypted } from "@/lib/crypto";
 
 /** Months a template has occurrences in, up to `currentMonth`. */
 function occurrenceMonths(t: RecurringTemplate, currentMonth: string): string[] {
@@ -17,14 +18,92 @@ function occurrenceMonths(t: RecurringTemplate, currentMonth: string): string[] 
 const expenseDate = (r: RecurringExpense, m: string) => `${m}-${pad2(Math.min(r.day_of_month, daysInMonth(m)))}`;
 const incomeDate = (_: RecurringIncome, m: string) => lastDayOfMonth(m);
 
+// ---------- encryption codec ----------
+// `amount`/`hours`/"desc" columns hold either a plain value (accounts that
+// haven't enabled encryption yet) or a ciphertext blob (see src/lib/crypto.ts)
+// — isEncrypted() tells the two apart per field, so both states can coexist
+// row by row during the one-time migration. `dek` is null whenever
+// encryption isn't enabled for this account; in that case values pass
+// through unchanged, exactly like before encryption existed.
+
+interface AmountDesc {
+  amount: number;
+  desc: string;
+}
+interface AmountHoursDesc extends AmountDesc {
+  hours: number;
+}
+
+async function decodeAmount(dek: CryptoKey | null, raw: unknown): Promise<number> {
+  const s = String(raw ?? "0");
+  if (!isEncrypted(s)) return Number(s);
+  if (!dek) return NaN; // shouldn't happen: the encryption gate blocks this state
+  try {
+    return await decryptNumber(dek, s);
+  } catch {
+    return NaN;
+  }
+}
+
+async function encodeAmount(dek: CryptoKey | null, n: number): Promise<string> {
+  return dek ? encryptNumber(dek, n) : String(n);
+}
+
+async function decodeText(dek: CryptoKey | null, raw: unknown): Promise<string> {
+  const s = String(raw ?? "");
+  if (!isEncrypted(s)) return s;
+  if (!dek) return "";
+  try {
+    return await decryptText(dek, s);
+  } catch {
+    return "";
+  }
+}
+
+async function encodeText(dek: CryptoKey | null, s: string): Promise<string> {
+  return dek ? encryptText(dek, s) : s;
+}
+
+async function decodeAmountDesc<T extends AmountDesc>(dek: CryptoKey | null, row: unknown): Promise<T> {
+  const r = row as T;
+  const [amount, desc] = await Promise.all([decodeAmount(dek, r.amount), decodeText(dek, r.desc)]);
+  return { ...r, amount, desc };
+}
+
+async function encodeAmountDesc(dek: CryptoKey | null, fields: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = { ...fields };
+  if (fields.amount !== undefined) out.amount = await encodeAmount(dek, Number(fields.amount));
+  if (fields.desc !== undefined) out.desc = await encodeText(dek, String(fields.desc));
+  return out;
+}
+
+async function decodeAmountHoursDesc<T extends AmountHoursDesc>(dek: CryptoKey | null, row: unknown): Promise<T> {
+  const r = row as T;
+  const [amount, hours, desc] = await Promise.all([decodeAmount(dek, r.amount), decodeAmount(dek, r.hours), decodeText(dek, r.desc)]);
+  return { ...r, amount, hours, desc };
+}
+
+async function encodeAmountHoursDesc(dek: CryptoKey | null, fields: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = { ...fields };
+  if (fields.amount !== undefined) out.amount = await encodeAmount(dek, Number(fields.amount));
+  if (fields.hours !== undefined) out.hours = await encodeAmount(dek, Number(fields.hours));
+  if (fields.desc !== undefined) out.desc = await encodeText(dek, String(fields.desc));
+  return out;
+}
+
 // Client-side data layer for one zone. Fetches everything once on mount
 // (sync is "poll at startup", per the agreed stack) and keeps local state in
 // sync with Supabase through each mutation below. Every mutation updates
 // local state immediately so the UI feels instant, then confirms against the
 // database; on failure it reports via the thrown/returned error so the
 // caller's undo affordance (the Toast "Cofnij" button) can revert cleanly.
+//
+// `dek` is the user's data key (see EncryptionContext) — present only while
+// encryption is enabled AND unlocked for this session. In-memory state here
+// always holds plain, decrypted values; only the wire payloads sent to/read
+// from Supabase pass through the codec above.
 
-export function useZoneData(zoneId: string | null, zoneCurrency = "PLN", currentMonth = "") {
+export function useZoneData(zoneId: string | null, zoneCurrency = "PLN", currentMonth = "", dek: CryptoKey | null = null) {
   const supabase = createClient();
   const [loading, setLoading] = useState(true);
   const [incomes, setIncomes] = useState<Income[]>([]);
@@ -49,22 +128,33 @@ export function useZoneData(zoneId: string | null, zoneCurrency = "PLN", current
       supabase.from("savings_entries").select("*").eq("zone_id", zoneId),
       supabase.from("category_budgets").select("*").eq("zone_id", zoneId),
       supabase.from("recurring_incomes").select("*").eq("zone_id", zoneId),
-    ]).then(([incomesRes, expensesRes, recurringRes, savingsStateRes, savingsEntriesRes, budgetsRes, recurringIncomesRes]) => {
+    ]).then(async ([incomesRes, expensesRes, recurringRes, savingsStateRes, savingsEntriesRes, budgetsRes, recurringIncomesRes]) => {
       if (cancelled) return;
-      setRecurringIncomes((recurringIncomesRes.data as RecurringIncome[]) ?? []);
-      setBudgets(((budgetsRes.data as CategoryBudget[]) ?? []).map((b) => ({ ...b, amount: Number(b.amount) })));
-      setIncomes((incomesRes.data as Income[]) ?? []);
-      setExpenses((expensesRes.data as Expense[]) ?? []);
-      setRecurring((recurringRes.data as RecurringExpense[]) ?? []);
-      setSavingsInitialState(savingsStateRes.data?.initial ?? 0);
-      setSavingsEntries((savingsEntriesRes.data as SavingsEntry[]) ?? []);
+      const [decodedIncomes, decodedExpenses, decodedRecurring, decodedRecurringIncomes, decodedSavingsEntries, decodedBudgets, decodedInitial] =
+        await Promise.all([
+          Promise.all(((incomesRes.data as unknown[]) ?? []).map((r) => decodeAmountHoursDesc<Income>(dek, r))),
+          Promise.all(((expensesRes.data as unknown[]) ?? []).map((r) => decodeAmountDesc<Expense>(dek, r))),
+          Promise.all(((recurringRes.data as unknown[]) ?? []).map((r) => decodeAmountDesc<RecurringExpense>(dek, r))),
+          Promise.all(((recurringIncomesRes.data as unknown[]) ?? []).map((r) => decodeAmountHoursDesc<RecurringIncome>(dek, r))),
+          Promise.all(((savingsEntriesRes.data as unknown[]) ?? []).map((r) => decodeAmountDesc<SavingsEntry>(dek, r))),
+          Promise.all(((budgetsRes.data as CategoryBudget[]) ?? []).map(async (b) => ({ ...b, amount: await decodeAmount(dek, b.amount) }))),
+          decodeAmount(dek, savingsStateRes.data?.initial ?? "0"),
+        ]);
+      if (cancelled) return;
+      setRecurringIncomes(decodedRecurringIncomes);
+      setBudgets(decodedBudgets);
+      setIncomes(decodedIncomes);
+      setExpenses(decodedExpenses);
+      setRecurring(decodedRecurring);
+      setSavingsInitialState(decodedInitial);
+      setSavingsEntries(decodedSavingsEntries);
       setLoading(false);
     });
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [zoneId]);
+  }, [zoneId, dek]);
 
   // ---------- per-month FX for foreign-currency templates ----------
   const fxKey = (currency: string, date: string) => `${currency}@${date}@${zoneCurrency}`;
@@ -125,12 +215,16 @@ export function useZoneData(zoneId: string | null, zoneCurrency = "PLN", current
   // ---------- incomes ----------
   async function addIncome(income: Omit<Income, "id" | "zone_id">) {
     if (!zoneId) return;
+    const payload = await encodeAmountHoursDesc(dek, income);
     const { data, error } = await supabase
       .from("incomes")
-      .insert({ ...income, zone_id: zoneId })
+      .insert({ ...payload, zone_id: zoneId })
       .select()
       .single();
-    if (!error && data) setIncomes((prev) => [...prev, data as Income]);
+    if (!error && data) {
+      const decoded = await decodeAmountHoursDesc<Income>(dek, data);
+      setIncomes((prev) => [...prev, decoded]);
+    }
     return error;
   }
 
@@ -143,14 +237,23 @@ export function useZoneData(zoneId: string | null, zoneCurrency = "PLN", current
 
   async function restoreIncome(income: Income) {
     const { id, ...rest } = income;
-    const { data } = await supabase.from("incomes").insert({ id, ...rest }).select().single();
-    if (data) setIncomes((prev) => [...prev, data as Income]);
+    const payload = await encodeAmountHoursDesc(dek, rest);
+    const { data } = await supabase
+      .from("incomes")
+      .insert({ id, ...payload })
+      .select()
+      .single();
+    if (data) {
+      const decoded = await decodeAmountHoursDesc<Income>(dek, data);
+      setIncomes((prev) => [...prev, decoded]);
+    }
   }
 
   async function updateIncome(id: string, patch: Partial<Omit<Income, "id" | "zone_id">>) {
     const before = incomes.find((x) => x.id === id);
     setIncomes((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
-    const { error } = await supabase.from("incomes").update(patch).eq("id", id);
+    const payload = await encodeAmountHoursDesc(dek, patch);
+    const { error } = await supabase.from("incomes").update(payload).eq("id", id);
     if (error && before) setIncomes((prev) => prev.map((x) => (x.id === id ? before : x)));
     return error;
   }
@@ -158,19 +261,24 @@ export function useZoneData(zoneId: string | null, zoneCurrency = "PLN", current
   // ---------- expenses ----------
   async function addExpense(expense: Omit<Expense, "id" | "zone_id">) {
     if (!zoneId) return;
+    const payload = await encodeAmountDesc(dek, expense);
     const { data, error } = await supabase
       .from("expenses")
-      .insert({ ...expense, zone_id: zoneId })
+      .insert({ ...payload, zone_id: zoneId })
       .select()
       .single();
-    if (!error && data) setExpenses((prev) => [...prev, data as Expense]);
+    if (!error && data) {
+      const decoded = await decodeAmountDesc<Expense>(dek, data);
+      setExpenses((prev) => [...prev, decoded]);
+    }
     return error;
   }
 
   async function updateExpense(id: string, patch: Partial<Omit<Expense, "id" | "zone_id">>) {
     const before = expenses.find((x) => x.id === id);
     setExpenses((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
-    const { error } = await supabase.from("expenses").update(patch).eq("id", id);
+    const payload = await encodeAmountDesc(dek, patch);
+    const { error } = await supabase.from("expenses").update(payload).eq("id", id);
     if (error && before) setExpenses((prev) => prev.map((x) => (x.id === id ? before : x)));
     return error;
   }
@@ -184,35 +292,51 @@ export function useZoneData(zoneId: string | null, zoneCurrency = "PLN", current
 
   async function restoreExpense(expense: Expense) {
     const { id, ...rest } = expense;
-    const { data } = await supabase.from("expenses").insert({ id, ...rest }).select().single();
-    if (data) setExpenses((prev) => [...prev, data as Expense]);
+    const payload = await encodeAmountDesc(dek, rest);
+    const { data } = await supabase
+      .from("expenses")
+      .insert({ id, ...payload })
+      .select()
+      .single();
+    if (data) {
+      const decoded = await decodeAmountDesc<Expense>(dek, data);
+      setExpenses((prev) => [...prev, decoded]);
+    }
   }
 
   // ---------- recurring templates (expenses & incomes) ----------
   // Both tables share the same template semantics, so one set of operations
-  // serves both; each instance is bound to its table and state.
-  function recurringOps<T extends RecurringTemplate>(
+  // serves both; each instance is bound to its table, state, and codec
+  // (expenses encode amount+desc, incomes also encode hours).
+  function recurringOps<T extends RecurringTemplate & AmountDesc>(
     table: "recurring_expenses" | "recurring_incomes",
     items: T[],
-    setItems: Dispatch<SetStateAction<T[]>>
+    setItems: Dispatch<SetStateAction<T[]>>,
+    encodeFields: (dek: CryptoKey | null, fields: Record<string, unknown>) => Promise<Record<string, unknown>>,
+    decodeItem: (dek: CryptoKey | null, row: unknown) => Promise<T>
   ) {
     type Fields = Omit<T, "id" | "zone_id" | "skip_months" | "created_at">;
 
     async function add(fields: Fields) {
       if (!zoneId) return;
+      const payload = await encodeFields(dek, fields as Record<string, unknown>);
       const { data, error } = await supabase
         .from(table)
-        .insert({ ...fields, zone_id: zoneId, skip_months: [] })
+        .insert({ ...payload, zone_id: zoneId, skip_months: [] })
         .select()
         .single();
-      if (!error && data) setItems((prev) => [...prev, data as T]);
+      if (!error && data) {
+        const decoded = await decodeItem(dek, data);
+        setItems((prev) => [...prev, decoded]);
+      }
       return error;
     }
 
     async function update(id: string, patch: Partial<Fields>) {
       const before = items.find((r) => r.id === id);
       setItems((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-      const { error } = await supabase.from(table).update(patch as Record<string, unknown>).eq("id", id);
+      const payload = await encodeFields(dek, patch as Record<string, unknown>);
+      const { error } = await supabase.from(table).update(payload).eq("id", id);
       if (error && before) setItems((prev) => prev.map((r) => (r.id === id ? before : r)));
       return error;
     }
@@ -240,8 +364,16 @@ export function useZoneData(zoneId: string | null, zoneCurrency = "PLN", current
         return {
           deleted: true,
           undo: async () => {
-            const { data } = await supabase.from(table).insert(tpl).select().single();
-            if (data) setItems((prev) => [...prev, data as T]);
+            const payload = await encodeFields(dek, tpl as unknown as Record<string, unknown>);
+            const { data } = await supabase
+              .from(table)
+              .insert({ ...tpl, ...payload })
+              .select()
+              .single();
+            if (data) {
+              const decoded = await decodeItem(dek, data);
+              setItems((prev) => [...prev, decoded]);
+            }
           },
         };
       }
@@ -268,27 +400,44 @@ export function useZoneData(zoneId: string | null, zoneCurrency = "PLN", current
     };
   }
 
-  const recurringExpenseOps = recurringOps("recurring_expenses", recurring, setRecurring);
-  const recurringIncomeOps = recurringOps("recurring_incomes", recurringIncomes, setRecurringIncomes);
+  const recurringExpenseOps = recurringOps<RecurringExpense>(
+    "recurring_expenses",
+    recurring,
+    setRecurring,
+    (d, f) => encodeAmountDesc(d, f),
+    (d, r) => decodeAmountDesc<RecurringExpense>(d, r)
+  );
+  const recurringIncomeOps = recurringOps<RecurringIncome>(
+    "recurring_incomes",
+    recurringIncomes,
+    setRecurringIncomes,
+    (d, f) => encodeAmountHoursDesc(d, f),
+    (d, r) => decodeAmountHoursDesc<RecurringIncome>(d, r)
+  );
 
   // ---------- savings ----------
   async function setSavingsInitial(value: number) {
     if (!zoneId) return;
     const before = savingsInitial;
     setSavingsInitialState(value);
-    const { error } = await supabase.from("savings_state").upsert({ zone_id: zoneId, initial: value });
+    const encoded = await encodeAmount(dek, value);
+    const { error } = await supabase.from("savings_state").upsert({ zone_id: zoneId, initial: encoded });
     if (error) setSavingsInitialState(before);
     return error;
   }
 
   async function addSavingsEntry(entry: Omit<SavingsEntry, "id" | "zone_id">) {
     if (!zoneId) return;
+    const payload = await encodeAmountDesc(dek, entry);
     const { data, error } = await supabase
       .from("savings_entries")
-      .insert({ ...entry, zone_id: zoneId })
+      .insert({ ...payload, zone_id: zoneId })
       .select()
       .single();
-    if (!error && data) setSavingsEntries((prev) => [...prev, data as SavingsEntry]);
+    if (!error && data) {
+      const decoded = await decodeAmountDesc<SavingsEntry>(dek, data);
+      setSavingsEntries((prev) => [...prev, decoded]);
+    }
     return error;
   }
 
@@ -301,14 +450,23 @@ export function useZoneData(zoneId: string | null, zoneCurrency = "PLN", current
 
   async function restoreSavingsEntry(entry: SavingsEntry) {
     const { id, ...rest } = entry;
-    const { data } = await supabase.from("savings_entries").insert({ id, ...rest }).select().single();
-    if (data) setSavingsEntries((prev) => [...prev, data as SavingsEntry]);
+    const payload = await encodeAmountDesc(dek, rest);
+    const { data } = await supabase
+      .from("savings_entries")
+      .insert({ id, ...payload })
+      .select()
+      .single();
+    if (data) {
+      const decoded = await decodeAmountDesc<SavingsEntry>(dek, data);
+      setSavingsEntries((prev) => [...prev, decoded]);
+    }
   }
 
   async function updateSavingsEntry(id: string, patch: Partial<Omit<SavingsEntry, "id" | "zone_id">>) {
     const before = savingsEntries.find((x) => x.id === id);
     setSavingsEntries((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
-    const { error } = await supabase.from("savings_entries").update(patch).eq("id", id);
+    const payload = await encodeAmountDesc(dek, patch);
+    const { error } = await supabase.from("savings_entries").update(payload).eq("id", id);
     if (error && before) setSavingsEntries((prev) => prev.map((x) => (x.id === id ? before : x)));
     return error;
   }
@@ -322,9 +480,10 @@ export function useZoneData(zoneId: string | null, zoneCurrency = "PLN", current
     const drop = budgets.map((b) => b.category_id).filter((c) => !keep.some(([k]) => k === c));
 
     if (keep.length > 0) {
-      const { error } = await supabase
-        .from("category_budgets")
-        .upsert(keep.map(([category_id, amount]) => ({ zone_id: zoneId, category_id, amount })));
+      const rows = await Promise.all(
+        keep.map(async ([category_id, amount]) => ({ zone_id: zoneId, category_id, amount: await encodeAmount(dek, amount) }))
+      );
+      const { error } = await supabase.from("category_budgets").upsert(rows);
       if (error) return error;
     }
     if (drop.length > 0) {
