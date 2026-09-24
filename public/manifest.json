@@ -1,8 +1,10 @@
 {
+  "id": "/",
   "name": "HomeSorted",
   "short_name": "HomeSorted",
   "description": "Ogarnij swoje sprawy — finanse i nie tylko.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#282b2e",
   "theme_color": "#282b2e",

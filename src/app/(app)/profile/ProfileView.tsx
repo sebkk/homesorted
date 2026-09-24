@@ -8,6 +8,7 @@ import { useForm } from "react-hook-form";
 import { createClient } from "@/lib/supabase/client";
 import { useEncryption } from "@/components/encryption/EncryptionContext";
 import { Banner, FormField, primaryButtonClass } from "@/components/ui/FormField";
+import { InstallSection } from "@/components/ui/InstallApp";
 
 const MIN_PASSWORD = 8;
 
@@ -47,6 +48,10 @@ export function ProfileView({ email, name }: { email: string; name: string }) {
 
         <Section title={t("password.title")}>
           <AccountPasswordForm email={email} />
+        </Section>
+
+        <Section title={t("app.title")}>
+          <InstallSection />
         </Section>
 
         {(status === "unlocked" || status === "locked") && (

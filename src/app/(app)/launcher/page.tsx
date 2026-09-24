@@ -3,6 +3,7 @@ import { getTranslations } from "next-intl/server";
 import { LanguageSwitch } from "@/components/ui/LanguageSwitch";
 import { EncryptionSetupBanner } from "@/components/encryption/EncryptionSetup";
 import { EncryptionLockButton } from "@/components/encryption/EncryptionLockButton";
+import { InstallBanner } from "@/components/ui/InstallApp";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/lib/actions";
 import { Zone } from "@/lib/types";
@@ -64,6 +65,7 @@ export default async function LauncherPage() {
         </div>
         <div className="text-[13px] text-ink-muted mb-[18px]">{t("intro")}</div>
 
+        <InstallBanner />
         <EncryptionSetupBanner />
 
         {pinnedZones.length > 0 && (

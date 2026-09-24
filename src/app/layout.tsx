@@ -68,6 +68,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   );
 }
 
+// Runs before React: registers the service worker and keeps Chrome/Edge's
+// install prompt, which can fire before the page hydrates — see
+// src/lib/useInstallPrompt.ts, which picks it up from window.__hsInstallPrompt.
 function ServiceWorkerRegister() {
   return (
     <script
@@ -78,6 +81,16 @@ function ServiceWorkerRegister() {
               navigator.serviceWorker.register('/sw.js').catch(function () {});
             });
           }
+          window.addEventListener('beforeinstallprompt', function (e) {
+            e.preventDefault();
+            window.__hsInstallPrompt = e;
+            window.dispatchEvent(new Event('hs-install-change'));
+          });
+          window.addEventListener('appinstalled', function () {
+            window.__hsInstallPrompt = null;
+            window.__hsInstalled = true;
+            window.dispatchEvent(new Event('hs-install-change'));
+          });
         `,
       }}
     />
