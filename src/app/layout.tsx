@@ -1,9 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
+import { Suspense } from "react";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getTranslations } from "next-intl/server";
 import { ToastProvider } from "@/components/ui/Toast";
+import { NavigationProgress } from "@/components/ui/NavigationProgress";
 
 const ibmPlexSans = IBM_Plex_Sans({
   subsets: ["latin", "latin-ext"],
@@ -51,6 +53,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang={locale} className={ibmPlexSans.variable}>
       <body className="font-sans flex justify-center">
+        {/* useSearchParams inside needs a Suspense boundary */}
+        <Suspense fallback={null}>
+          <NavigationProgress />
+        </Suspense>
         <div className="w-full max-w-[480px] min-h-dvh md:min-h-[min(860px,calc(100dvh-48px))] md:my-6 md:rounded-[20px] md:overflow-hidden md:bg-surface glass md:border md:border-border md:shadow-glass relative flex flex-col">
           <NextIntlClientProvider>
             <ToastProvider>{children}</ToastProvider>

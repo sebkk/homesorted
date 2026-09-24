@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { startNavigationProgress } from "@/components/ui/NavigationProgress";
 import { useTranslations } from "next-intl";
 import { useForm } from "react-hook-form";
 import { createClient } from "@/lib/supabase/client";
@@ -159,6 +160,7 @@ function SignInForm({ defaultEmail, onForgot }: { defaultEmail: string; onForgot
       return;
     }
     setRedirecting(true);
+    startNavigationProgress();
     router.push("/launcher");
     router.refresh();
   }
@@ -250,6 +252,7 @@ function SignUpForm({ onDone, onAlreadyRegistered }: { onDone: (email: string) =
     if (data.session) {
       // Confirmation disabled in Supabase: the account is ready right away.
       setRedirecting(true);
+      startNavigationProgress();
       router.push("/launcher");
       router.refresh();
       return;

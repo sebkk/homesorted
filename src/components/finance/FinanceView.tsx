@@ -13,6 +13,7 @@ import { ExpensesTab } from "@/components/finance/ExpensesTab";
 import { SavingsTab } from "@/components/finance/SavingsTab";
 import { FinanceSheets, SheetState } from "@/components/finance/FinanceSheets";
 import { MoneyProvider } from "@/components/finance/MoneyContext";
+import { FinanceSkeleton } from "@/components/finance/FinanceSkeleton";
 import { Logo } from "@/components/ui/Logo";
 import { useEncryption } from "@/components/encryption/EncryptionContext";
 import { EncryptionLockButton } from "@/components/encryption/EncryptionLockButton";
@@ -66,7 +67,7 @@ export function FinanceView({
 
       <main className="flex-1 min-h-0 overflow-y-auto px-5 pt-4" style={{ paddingBottom: "112px" }}>
         {zd.loading ? (
-          <div className="text-center py-10 text-ink-muted text-[13px]">{t("loading")}</div>
+          <FinanceSkeleton tab={tab} />
         ) : tab === "dashboard" ? (
           <DashboardTab
             zd={zd}

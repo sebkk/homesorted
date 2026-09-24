@@ -7,6 +7,7 @@ import { useIntlLocale, useMonthFormat, usePeriodRange } from "@/i18n/useFormat"
 import { CURRENCIES, currencyName } from "@/lib/currencies";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { startNavigationProgress } from "@/components/ui/NavigationProgress";
 import { createClient } from "@/lib/supabase/client";
 import { createZone, deleteZone, togglePinZone, updateZone } from "@/lib/actions";
 import { currentMonthStr, currentPeriod, nextMonth, type MonthPeriod } from "@/lib/finance";
@@ -15,6 +16,7 @@ import { Sheet, SheetHeader, Field, fieldAria } from "@/components/ui/Sheet";
 import { Banner } from "@/components/ui/FormField";
 import { useToast } from "@/components/ui/Toast";
 import { PencilIcon } from "@/components/finance/icons";
+import { Skeleton, SkeletonScreen } from "@/components/ui/Skeleton";
 
 const CAT_VARS = [
   "var(--cat1)", "var(--cat2)", "var(--cat3)", "var(--cat4)",
@@ -94,10 +96,24 @@ export default function ZonesPage() {
           </div>
         )}
 
+        {loading && (
+          <SkeletonScreen label={tf("loading")} className="flex flex-col gap-2">
+            {[0, 1].map((i) => (
+              <div key={i} className="bg-surface-2 border border-border rounded-lg p-3 flex items-center gap-3">
+                <Skeleton className="w-9 h-9 shrink-0" />
+                <Skeleton className="h-3.5 w-2/5" />
+                <div className="flex-1" />
+                <Skeleton className="w-8 h-8 shrink-0" />
+                <Skeleton className="w-8 h-8 shrink-0" />
+              </div>
+            ))}
+          </SkeletonScreen>
+        )}
+
         <div className="flex flex-col gap-2">
           {zones.map((zone) => (
             <div key={zone.id} className="bg-surface-2 border border-border rounded-lg p-3 flex items-center gap-2">
-              <Link href={`/finance/${zone.id}`} className="flex items-center gap-3 flex-1 min-w-0">
+              <Link href={`/finance/${zone.id}`} className="flex items-center gap-3 flex-1 min-w-0 rounded-md -m-1 p-1">
                 <span
                   className="w-9 h-9 rounded-md flex items-center justify-center shrink-0"
                   style={{ background: CAT_VARS[(zone.color - 1) % 8] + "29", color: CAT_VARS[(zone.color - 1) % 8] }}
@@ -179,6 +195,7 @@ function CreateZoneForm({ onClose }: { onClose: () => void }) {
       return;
     }
     onClose();
+    startNavigationProgress();
     router.push(`/finance/${data.id}`);
   }
 

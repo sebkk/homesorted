@@ -126,7 +126,7 @@ export default async function LauncherPage() {
         </div>
       </div>
 
-      <form action={signOut}>
+      <form action={signOut} data-navigates>
         <button
           type="submit"
           className="block flex-none w-full bg-transparent border-none border-t border-border text-ink-faint font-sans text-xs font-semibold cursor-pointer px-5 pt-3.5"

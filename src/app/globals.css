@@ -89,3 +89,179 @@ body {
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
+
+/* ---------- interaction feedback ----------
+   One rule set for every clickable element (buttons, links, tiles, role=button)
+   instead of per-component hover classes, so nothing is left without feedback.
+   Every effect uses a property browsers can animate, so it fades in and out:
+   - surfaces brighten through an inset box-shadow overlay (drawn above the
+     background, under the content; background-image can't be transitioned);
+   - text buttons fade an underline in via text-decoration-color.
+   Hover only on devices that really hover (no "stuck" hover after a tap);
+   press feedback everywhere. */
+@layer base {
+  a[href],
+  button,
+  [role="button"],
+  summary {
+    -webkit-tap-highlight-color: transparent;
+    transition:
+      box-shadow 0.2s ease,
+      filter 0.2s ease,
+      transform 0.12s ease,
+      background-color 0.2s ease,
+      border-color 0.2s ease,
+      color 0.2s ease,
+      text-decoration-color 0.2s ease,
+      opacity 0.2s ease;
+  }
+
+  /* Resting state of each effect, so there's something to animate from. */
+  :is(a[href], button, [role="button"]):not(.bg-transparent):not([class*="shadow-"]):not(svg *) {
+    box-shadow: inset 0 0 0 100vmax rgba(255, 255, 255, 0);
+  }
+  :is(a[href], button, [role="button"]).shadow-glass {
+    box-shadow: var(--shadow), inset 0 0 0 100vmax rgba(255, 255, 255, 0);
+  }
+  :is(a[href], button).bg-transparent {
+    text-decoration-line: underline;
+    text-decoration-color: transparent;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+  }
+
+  button:not(:disabled),
+  [role="button"],
+  summary,
+  select:not(:disabled),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  input[type="month"]:not(:disabled),
+  input[type="date"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  input,
+  select {
+    transition: border-color 0.2s ease;
+  }
+
+  @media (hover: hover) {
+    /* Tiles, cards and buttons with a surface: the whole surface brightens
+       and the border lifts. */
+    :is(a[href], button:not(:disabled), [role="button"]):not(.bg-transparent):not([class*="shadow-"]):not(svg *):hover {
+      box-shadow: inset 0 0 0 100vmax rgba(255, 255, 255, 0.09);
+      filter: brightness(1.06);
+    }
+    :is(a[href], button:not(:disabled), [role="button"]).shadow-glass:hover {
+      box-shadow: var(--shadow), inset 0 0 0 100vmax rgba(255, 255, 255, 0.09);
+      filter: brightness(1.06);
+    }
+    /* Buttons with their own coloured glow (e.g. the primary button) keep it
+       and just brighten. */
+    :is(a[href], button:not(:disabled))[class*="shadow-"]:not(.shadow-glass):hover {
+      filter: brightness(1.15);
+    }
+    :is(a[href], button:not(:disabled)).border-border:hover {
+      border-color: rgba(255, 255, 255, 0.32);
+    }
+
+    /* Text-only buttons and links: the underline fades in, text brightens. */
+    :is(a[href], button:not(:disabled)).bg-transparent:hover {
+      text-decoration-color: currentColor;
+      filter: brightness(1.3);
+    }
+
+    /* Icon-only buttons without a background of their own, and the tab bar:
+       a soft pill fades in behind the icon (components with their own hover
+       colour, like IconButton, keep it). */
+    :is(button.bg-transparent:has(> svg:only-child), nav button):not(:disabled):not([class*="hover:bg-"]):hover {
+      text-decoration-color: transparent;
+      background-color: rgba(255, 255, 255, 0.09);
+      filter: brightness(1.3);
+    }
+
+    input:not(:focus):not([aria-invalid="true"]):not([type="checkbox"]):not([type="radio"]):hover,
+    select:not(:focus):not(:disabled):hover {
+      border-color: rgba(255, 255, 255, 0.26);
+    }
+  }
+
+  a[href]:active,
+  button:not(:disabled):active,
+  [role="button"]:active {
+    filter: brightness(0.9);
+    transform: scale(0.97);
+  }
+
+  /* Large tiles and list rows: a smaller squeeze reads better at their size. */
+  a[href].rounded-xl:active,
+  a[href].rounded-lg:active,
+  a[href].flex-1:active {
+    transform: scale(0.985);
+  }
+
+  /* Chart hit areas are SVG shapes: scaling them would jump from the SVG
+     origin — the tooltip is their hover feedback instead. */
+  svg [role="button"],
+  svg [role="button"]:hover,
+  svg [role="button"]:active {
+    filter: none;
+    transform: none;
+  }
+
+  a[href]:focus-visible,
+  button:focus-visible,
+  [role="button"]:focus-visible,
+  summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    a[href],
+    button,
+    [role="button"],
+    summary {
+      transition-duration: 0.01ms;
+    }
+    a[href]:active,
+    button:not(:disabled):active,
+    [role="button"]:active {
+      transform: none;
+    }
+  }
+}
+
+/* ---------- skeletons ----------
+   Placeholder blocks shaped like the content that's loading, with a soft
+   shimmer (still when the user prefers reduced motion). */
+.skeleton {
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0.05) 30%,
+    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0.05) 70%
+  );
+  background-size: 250% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
