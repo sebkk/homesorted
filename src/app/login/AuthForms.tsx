@@ -9,9 +9,14 @@ import { LanguageSwitch } from "@/components/ui/LanguageSwitch";
 import { Banner, FormField, primaryButtonClass } from "@/components/ui/FormField";
 import { Logo } from "@/components/ui/Logo";
 
-export type LoginNotice = "confirmed" | "confirmError" | null;
+export type LoginNotice = "confirmed" | "confirmError" | "resetError" | null;
 
-type View = { kind: "signin" } | { kind: "signup" } | { kind: "signupDone"; email: string };
+type View =
+  | { kind: "signin" }
+  | { kind: "signup" }
+  | { kind: "signupDone"; email: string }
+  | { kind: "forgot" }
+  | { kind: "forgotSent"; email: string };
 
 interface SignInValues {
   email: string;
@@ -52,7 +57,13 @@ export function AuthForms({ notice }: { notice: LoginNotice }) {
         <Logo size={44} />
         <div className="text-xl font-bold tracking-tight">HomeSorted</div>
         <div className="text-[13px] text-ink-muted leading-relaxed max-w-[280px]">
-          {view.kind === "signin" ? t("signInIntro") : view.kind === "signup" ? t("signUpIntro") : t("checkInboxTitle")}
+          {view.kind === "signin"
+            ? t("signInIntro")
+            : view.kind === "signup"
+              ? t("signUpIntro")
+              : view.kind === "forgot"
+                ? t("forgotIntro")
+                : t("checkInboxTitle")}
         </div>
       </div>
 
@@ -60,7 +71,14 @@ export function AuthForms({ notice }: { notice: LoginNotice }) {
         <>
           {notice === "confirmed" && <Banner tone="good">{t("notices.confirmed")}</Banner>}
           {notice === "confirmError" && <Banner tone="critical">{t("notices.confirmError")}</Banner>}
-          <SignInForm defaultEmail={prefillEmail} />
+          {notice === "resetError" && <Banner tone="critical">{t("notices.resetError")}</Banner>}
+          <SignInForm
+            defaultEmail={prefillEmail}
+            onForgot={(email) => {
+              setPrefillEmail(email);
+              setView({ kind: "forgot" });
+            }}
+          />
           <SwitchPrompt question={t("noAccountQuestion")} action={t("signUp")} onClick={() => setView({ kind: "signup" })} />
         </>
       )}
@@ -78,6 +96,32 @@ export function AuthForms({ notice }: { notice: LoginNotice }) {
         </>
       )}
 
+      {view.kind === "forgot" && (
+        <>
+          <ForgotPasswordForm defaultEmail={prefillEmail} onSent={(email) => setView({ kind: "forgotSent", email })} />
+          <SwitchPrompt question={t("rememberedQuestion")} action={t("signIn")} onClick={() => setView({ kind: "signin" })} />
+        </>
+      )}
+
+      {view.kind === "forgotSent" && (
+        <div className="flex flex-col gap-3">
+          <Banner tone="good">
+            {t.rich("forgotSentBody", { email: view.email, b: (chunks) => <b className="font-semibold break-all">{chunks}</b> })}
+          </Banner>
+          <div className="text-[12px] text-ink-muted leading-relaxed">{t("forgotSentHint")}</div>
+          <button
+            type="button"
+            onClick={() => {
+              setPrefillEmail(view.email);
+              setView({ kind: "signin" });
+            }}
+            className={primaryButtonClass}
+          >
+            {t("backToSignIn")}
+          </button>
+        </div>
+      )}
+
       {view.kind === "signupDone" && (
         <SignUpDone
           email={view.email}
@@ -93,7 +137,7 @@ export function AuthForms({ notice }: { notice: LoginNotice }) {
   );
 }
 
-function SignInForm({ defaultEmail }: { defaultEmail: string }) {
+function SignInForm({ defaultEmail, onForgot }: { defaultEmail: string; onForgot: (email: string) => void }) {
   const t = useTranslations("login");
   const router = useRouter();
   const [formError, setFormError] = useState<{ key: string; email?: string } | null>(null);
@@ -101,6 +145,7 @@ function SignInForm({ defaultEmail }: { defaultEmail: string }) {
   const {
     register,
     handleSubmit,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<SignInValues>({ defaultValues: { email: defaultEmail, password: "" }, mode: "onTouched" });
 
@@ -143,6 +188,13 @@ function SignInForm({ defaultEmail }: { defaultEmail: string }) {
         error={errors.password}
         registration={register("password", { required: t("validation.passwordRequired") })}
       />
+      <button
+        type="button"
+        onClick={() => onForgot(getValues("email").trim())}
+        className="self-end -mt-1 text-[12.5px] font-semibold text-accent bg-transparent border-none"
+      >
+        {t("forgotLink")}
+      </button>
 
       {formError && (
         <Banner tone="critical">
@@ -273,6 +325,56 @@ function SignUpForm({ onDone, onAlreadyRegistered }: { onDone: (email: string) =
 
       <button type="submit" disabled={busy} className={primaryButtonClass}>
         {busy ? t("signingUp") : t("signUp")}
+      </button>
+    </form>
+  );
+}
+
+/** Sends a password-reset link. The response is the same whether or not the
+ * address has an account, so the form can't be used to probe for accounts. */
+function ForgotPasswordForm({ defaultEmail, onSent }: { defaultEmail: string; onSent: (email: string) => void }) {
+  const t = useTranslations("login");
+  const [formError, setFormError] = useState<string | null>(null);
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<{ email: string }>({ defaultValues: { email: defaultEmail }, mode: "onTouched" });
+
+  async function onSubmit(values: { email: string }) {
+    setFormError(null);
+    const email = values.email.trim();
+    const { error } = await createClient().auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/reset`,
+    });
+    if (error) {
+      const key = authErrorKey(error.message);
+      // Any other error would leak whether the address exists; treat as sent.
+      if (key === "errors.rateLimit" || key === "errors.network") {
+        setFormError(key);
+        return;
+      }
+    }
+    onSent(email);
+  }
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-3">
+      <FormField
+        id="forgotEmail"
+        label={t("email")}
+        type="email"
+        autoComplete="email"
+        placeholder={t("emailPlaceholder")}
+        error={errors.email}
+        registration={register("email", {
+          required: t("validation.emailRequired"),
+          pattern: { value: EMAIL_PATTERN, message: t("validation.emailInvalid") },
+        })}
+      />
+      {formError && <Banner tone="critical">{t(formError)}</Banner>}
+      <button type="submit" disabled={isSubmitting} className={primaryButtonClass}>
+        {isSubmitting ? t("sending") : t("sendResetLink")}
       </button>
     </form>
   );

@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
+import { useFormContext, useWatch } from "react-hook-form";
 import { CURRENCIES, currencyName } from "@/lib/currencies";
 import { useMoney } from "@/components/finance/MoneyContext";
-import { Field } from "@/components/ui/Sheet";
+import { Field, fieldAria } from "@/components/ui/Sheet";
 
 interface Quote {
   key: string;
@@ -99,45 +100,61 @@ export function useFx(date: string, initial?: FxInitial) {
     setManualRate,
     /** Columns to save alongside the amount; null while the rate is unknown. */
     fields: rate === null ? null : { currency, fx_rate: rate, fx_date: meta.date, fx_table: meta.table },
+    /** Why `fields` is null, as a "fx" message key — shown when saving is attempted. */
+    missingReason: rate !== null ? null : manualRate !== null ? "rateInvalid" : needsFetch && !fetched ? "rateLoading" : "missing",
   };
 }
 
 export type Fx = ReturnType<typeof useFx>;
 
 const inputClass =
-  "text-[14.5px] font-medium text-ink bg-sheet-field-bg border border-border rounded-md px-3 py-2.5 outline-none focus:border-accent tabular-nums";
+  "text-[14.5px] font-medium text-ink bg-sheet-field-bg border border-border rounded-md px-3 py-2.5 outline-none focus:border-accent aria-[invalid=true]:border-critical tabular-nums";
 
+/** Amount must be a positive number with at most 2 decimal places. */
+const AMOUNT_PATTERN = /^\d+([.,]\d{1,2})?$/;
+
+/** The form's "amount" field (react-hook-form, via FormProvider) with its
+ * currency picker, NBP rate preview and optional manual rate. `fxError`
+ * explains a missing rate after a save attempt. */
 export function AmountWithCurrency({
   id,
   label,
-  amount,
-  setAmount,
   fx,
+  fxError,
   hint,
 }: {
   id: string;
   label: string;
-  amount: string;
-  setAmount: (v: string) => void;
   fx: Fx;
+  fxError?: string;
   hint?: string;
 }) {
   const t = useTranslations("fx");
+  const tv = useTranslations("validation");
   const { fmt, locale } = useMoney();
-  const value = parseFloat(amount) || 0;
+  const { register, control, formState } = useFormContext<{ amount: string }>();
+  const value = parseFloat(String(useWatch({ control, name: "amount" }) ?? "").replace(",", ".")) || 0;
+  const error = formState.errors.amount;
 
   return (
-    <Field label={label} htmlFor={id} hint={hint}>
+    <Field label={label} htmlFor={id} hint={hint} error={error?.message}>
       <div className="flex flex-row gap-2 items-center">
         <input
           id={id}
-          type="number"
-          min={0}
-          step={0.01}
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
+          type="text"
+          inputMode="decimal"
+          autoComplete="off"
+          {...fieldAria(id, error)}
+          {...register("amount", {
+            required: tv("amountRequired"),
+            validate: (v) => {
+              const s = String(v).trim();
+              if (!AMOUNT_PATTERN.test(s)) return tv("amountFormat");
+              return parseFloat(s.replace(",", ".")) > 0 || tv("amountPositive");
+            },
+          })}
           className={inputClass + " flex-1 min-w-0"}
-          placeholder="0"
+          placeholder="0,00"
         />
         <select
           id={`${id}Currency`}
@@ -156,7 +173,12 @@ export function AmountWithCurrency({
       {fx.foreign && (
         <div className="text-[11.5px] font-normal text-ink-muted mt-1 flex flex-col gap-1">
           {fx.loading && <span>{t("loading")}</span>}
-          {fx.failed && <span className="text-critical">{t("missing")}</span>}
+          {fx.failed && !fxError && <span className="text-critical">{t("missing")}</span>}
+          {fxError && (
+            <span role="alert" className="text-critical">
+              {fxError}
+            </span>
+          )}
           {fx.rate !== null && (
             <span className="tabular-nums">
               1 {fx.currency} = {fx.rate.toLocaleString(locale, { maximumFractionDigits: 6 })} {fx.zoneCurrency}

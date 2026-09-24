@@ -2,31 +2,37 @@
 
 import Link from "next/link";
 import { useTranslations } from "next-intl";
+import { useForm } from "react-hook-form";
 import { useIntlLocale } from "@/i18n/useFormat";
 import { CURRENCIES, currencyName } from "@/lib/currencies";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { createZone, togglePinZone } from "@/lib/actions";
-import { Zone } from "@/lib/types";
-import { Sheet, SheetHeader, Field } from "@/components/ui/Sheet";
+import { createZone, deleteZone, renameZone, togglePinZone } from "@/lib/actions";
+import { MAX_ZONE_NAME, Zone } from "@/lib/types";
+import { Sheet, SheetHeader, Field, fieldAria } from "@/components/ui/Sheet";
+import { Banner } from "@/components/ui/FormField";
+import { useToast } from "@/components/ui/Toast";
+import { PencilIcon } from "@/components/finance/icons";
 
 const CAT_VARS = [
   "var(--cat1)", "var(--cat2)", "var(--cat3)", "var(--cat4)",
   "var(--cat5)", "var(--cat6)", "var(--cat7)", "var(--cat8)",
 ];
 
+const inputClass =
+  "text-[14.5px] font-medium text-ink bg-surface-2 border border-border rounded-md px-3 py-2.5 outline-none focus:border-accent aria-[invalid=true]:border-critical";
+const primaryButton = "font-bold text-[14.5px] text-accent-ink bg-accent rounded-md py-3 mb-1 disabled:opacity-60";
+
+type SheetState = { kind: "create" } | { kind: "edit"; zone: Zone } | null;
+
 export default function ZonesPage() {
   const t = useTranslations("zones");
   const tf = useTranslations("finance");
-  const intlLocale = useIntlLocale();
-  const router = useRouter();
   const supabase = createClient();
   const [zones, setZones] = useState<Zone[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newCurrency, setNewCurrency] = useState("PLN");
+  const [sheet, setSheet] = useState<SheetState>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -50,16 +56,6 @@ export default function ZonesPage() {
     await togglePinZone(zone.id, !zone.pinned);
   }
 
-  async function handleCreate() {
-    if (!newName.trim()) return;
-    const { data, error } = await createZone(newName.trim(), newCurrency);
-    if (!error && data) {
-      setSheetOpen(false);
-      setNewName("");
-      router.push(`/finance/${data.id}`);
-    }
-  }
-
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <header className="sticky top-0 z-20 bg-surface glass flex items-center justify-between border-b border-border px-5"
@@ -77,7 +73,7 @@ export default function ZonesPage() {
         <button
           type="button"
           aria-label={t("new")}
-          onClick={() => setSheetOpen(true)}
+          onClick={() => setSheet({ kind: "create" })}
           className="w-8 h-8 rounded-md border border-border bg-surface-2 text-ink-muted flex items-center justify-center"
         >
           <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round">
@@ -99,7 +95,7 @@ export default function ZonesPage() {
 
         <div className="flex flex-col gap-2">
           {zones.map((zone) => (
-            <div key={zone.id} className="bg-surface-2 border border-border rounded-lg p-3 flex items-center gap-3">
+            <div key={zone.id} className="bg-surface-2 border border-border rounded-lg p-3 flex items-center gap-2">
               <Link href={`/finance/${zone.id}`} className="flex items-center gap-3 flex-1 min-w-0">
                 <span
                   className="w-9 h-9 rounded-md flex items-center justify-center shrink-0"
@@ -113,6 +109,14 @@ export default function ZonesPage() {
                 <span className="text-[13.5px] font-semibold truncate">{zone.name}</span>
                 <span className="text-[11px] font-semibold text-ink-muted shrink-0">{zone.currency}</span>
               </Link>
+              <button
+                type="button"
+                onClick={() => setSheet({ kind: "edit", zone })}
+                aria-label={t("editZone", { name: zone.name })}
+                className="shrink-0 w-8 h-8 rounded-md border border-border bg-surface text-ink-faint flex items-center justify-center"
+              >
+                <PencilIcon />
+              </button>
               <button
                 type="button"
                 onClick={() => handlePin(zone)}
@@ -130,40 +134,173 @@ export default function ZonesPage() {
         </div>
       </div>
 
-      <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)}>
-        <SheetHeader title={t("new")} onClose={() => setSheetOpen(false)} />
-        <Field label={t("name")} htmlFor="zoneName">
-          <input
-            id="zoneName"
-            type="text"
-            placeholder={t("namePlaceholder")}
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            className="text-[14.5px] font-medium text-ink bg-surface-2 border border-border rounded-md px-3 py-2.5 outline-none focus:border-accent"
+      <Sheet open={sheet !== null} onClose={() => setSheet(null)}>
+        {sheet?.kind === "create" && <CreateZoneForm onClose={() => setSheet(null)} />}
+        {sheet?.kind === "edit" && (
+          <EditZoneForm
+            key={sheet.zone.id}
+            zone={sheet.zone}
+            onClose={() => setSheet(null)}
+            onRenamed={(name) => setZones((prev) => prev.map((z) => (z.id === sheet.zone.id ? { ...z, name } : z)))}
+            onDeleted={() => setZones((prev) => prev.filter((z) => z.id !== sheet.zone.id))}
           />
-        </Field>
-        <Field label={t("currency")} htmlFor="zoneCurrency" hint={t("currencyHint")}>
-          <select
-            id="zoneCurrency"
-            value={newCurrency}
-            onChange={(e) => setNewCurrency(e.target.value)}
-            className="text-[14.5px] font-medium text-ink bg-surface-2 border border-border rounded-md px-3 py-2.5 outline-none focus:border-accent"
-          >
-            {CURRENCIES.map((c) => (
-              <option key={c} value={c}>
-                {c} — {currencyName(c, intlLocale)}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <button
-          type="button"
-          onClick={handleCreate}
-          className="font-bold text-[14.5px] text-accent-ink bg-accent rounded-md py-3 mb-1"
-        >
-          {t("create")}
-        </button>
+        )}
       </Sheet>
+    </div>
+  );
+}
+
+function useNameRules() {
+  const t = useTranslations("zones");
+  return {
+    validate: (v: string) => v.trim().length > 0 || t("validation.nameRequired"),
+    maxLength: { value: MAX_ZONE_NAME, message: t("validation.nameTooLong", { max: MAX_ZONE_NAME }) },
+  };
+}
+
+function CreateZoneForm({ onClose }: { onClose: () => void }) {
+  const t = useTranslations("zones");
+  const intlLocale = useIntlLocale();
+  const router = useRouter();
+  const nameRules = useNameRules();
+  const [serverError, setServerError] = useState(false);
+  const { register, handleSubmit, formState } = useForm<{ name: string; currency: string }>({
+    mode: "onTouched",
+    defaultValues: { name: "", currency: "PLN" },
+  });
+  const error = formState.errors.name;
+
+  async function onSubmit(v: { name: string; currency: string }) {
+    setServerError(false);
+    const { data, error } = await createZone(v.name.trim(), v.currency);
+    if (error || !data) {
+      setServerError(true);
+      return;
+    }
+    onClose();
+    router.push(`/finance/${data.id}`);
+  }
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-3">
+      <SheetHeader title={t("new")} onClose={onClose} />
+      <Field label={t("name")} htmlFor="zoneName" error={error?.message}>
+        <input id="zoneName" type="text" placeholder={t("namePlaceholder")} {...fieldAria("zoneName", error)} {...register("name", nameRules)} className={inputClass} />
+      </Field>
+      <Field label={t("currency")} htmlFor="zoneCurrency" hint={t("currencyHint")}>
+        <select id="zoneCurrency" {...register("currency")} className={inputClass}>
+          {CURRENCIES.map((c) => (
+            <option key={c} value={c}>
+              {c} — {currencyName(c, intlLocale)}
+            </option>
+          ))}
+        </select>
+      </Field>
+      {serverError && <Banner tone="critical">{t("errors.saveFailed")}</Banner>}
+      <button type="submit" disabled={formState.isSubmitting} className={primaryButton}>
+        {formState.isSubmitting ? t("creating") : t("create")}
+      </button>
+    </form>
+  );
+}
+
+function EditZoneForm({
+  zone,
+  onClose,
+  onRenamed,
+  onDeleted,
+}: {
+  zone: Zone;
+  onClose: () => void;
+  onRenamed: (name: string) => void;
+  onDeleted: () => void;
+}) {
+  const t = useTranslations("zones");
+  const { showToast } = useToast();
+  const nameRules = useNameRules();
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const { register, handleSubmit, formState } = useForm<{ name: string }>({ mode: "onTouched", defaultValues: { name: zone.name } });
+  const error = formState.errors.name;
+
+  async function onSubmit(v: { name: string }) {
+    setServerError(null);
+    const name = v.name.trim();
+    const { error } = await renameZone(zone.id, name);
+    if (error) {
+      setServerError(t("errors.saveFailed"));
+      return;
+    }
+    onRenamed(name);
+    onClose();
+    showToast(t("renamed", { name }));
+  }
+
+  async function handleDelete() {
+    setServerError(null);
+    setDeleting(true);
+    const { error } = await deleteZone(zone.id);
+    setDeleting(false);
+    if (error) {
+      setServerError(t("errors.deleteFailed"));
+      return;
+    }
+    onDeleted();
+    onClose();
+    showToast(t("deleted", { name: zone.name }));
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-3">
+        <SheetHeader title={t("editTitle")} onClose={onClose} />
+        <Field label={t("name")} htmlFor="editZoneName" error={error?.message}>
+          <input id="editZoneName" type="text" {...fieldAria("editZoneName", error)} {...register("name", nameRules)} className={inputClass} />
+        </Field>
+        <div className="text-[11.5px] text-ink-faint -mt-1">{t("currencyLocked", { currency: zone.currency })}</div>
+        <button type="submit" disabled={formState.isSubmitting || !formState.isDirty} className={primaryButton}>
+          {formState.isSubmitting ? t("saving") : t("saveName")}
+        </button>
+      </form>
+
+      {serverError && <Banner tone="critical">{serverError}</Banner>}
+
+      <div className="border-t border-border pt-3 flex flex-col gap-2.5 mb-1">
+        {!confirmDelete ? (
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(true)}
+            className="font-semibold text-[13px] text-critical bg-critical-soft border-none rounded-md py-2.5"
+          >
+            {t("delete")}
+          </button>
+        ) : (
+          <>
+            <div role="alert" className="text-[12.5px] text-critical leading-relaxed bg-critical-soft rounded-md px-3 py-2.5">
+              {t.rich("deleteWarning", { name: zone.name, b: (chunks) => <b className="font-semibold">{chunks}</b> })}
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(false)}
+                disabled={deleting}
+                className="flex-1 font-semibold text-[13px] text-ink-muted bg-surface-2 border border-border rounded-md py-2.5"
+              >
+                {t("cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 font-bold text-[13px] text-white bg-critical border-none rounded-md py-2.5 disabled:opacity-60"
+              >
+                {deleting ? t("deleting") : t("confirmDelete")}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

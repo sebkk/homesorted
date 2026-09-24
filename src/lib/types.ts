@@ -165,6 +165,9 @@ export interface RecurringIncomeOccurrence {
 
 export const VAT_RATE = 0.23;
 
+/** Longest zone name accepted (UI validation and the zone server actions). */
+export const MAX_ZONE_NAME = 50;
+
 export type AnyIncome = Income | RecurringIncomeOccurrence;
 
 /** Display order of income types; labels live in messages ("incomeTypes"). */

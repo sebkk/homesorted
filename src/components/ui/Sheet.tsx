@@ -46,22 +46,38 @@ export function SheetHeader({ title, onClose }: { title: string; onClose: () => 
   );
 }
 
+/** Label + control + hint. A validation `error` replaces the hint and gets
+ * id `${htmlFor}-error` — point the control's aria-describedby at it
+ * (see fieldAria). */
 export function Field({
   label,
   hint,
   htmlFor,
+  error,
   children,
 }: {
   label: string;
   hint?: string;
   htmlFor: string;
+  error?: string;
   children: React.ReactNode;
 }) {
   return (
     <label className="flex flex-col gap-1.5 text-xs font-semibold text-ink-muted" htmlFor={htmlFor}>
       <span>{label}</span>
       {children}
-      {hint && <span className="text-[11px] font-normal text-ink-faint leading-snug">{hint}</span>}
+      {error ? (
+        <span id={`${htmlFor}-error`} role="alert" className="text-[11.5px] font-normal text-critical leading-snug">
+          {error}
+        </span>
+      ) : (
+        hint && <span className="text-[11px] font-normal text-ink-faint leading-snug">{hint}</span>
+      )}
     </label>
   );
+}
+
+/** aria attributes linking an invalid control to its Field error. */
+export function fieldAria(id: string, error?: { message?: string }) {
+  return error ? { "aria-invalid": true, "aria-describedby": `${id}-error` } : {};
 }

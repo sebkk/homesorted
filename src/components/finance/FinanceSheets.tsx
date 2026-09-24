@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
+import { FormProvider, useForm, useFormContext, useWatch } from "react-hook-form";
 import { useIncomeTypeLabel, useMonthFormat } from "@/i18n/useFormat";
 import { useMoney } from "@/components/finance/MoneyContext";
 import { useZoneData } from "@/lib/useZoneData";
@@ -9,10 +10,10 @@ import { useCategories } from "@/lib/useCategories";
 import { daysInMonth, grossAmount, lastDayOfMonth, nextMonth, pad2, prevMonth, todayStr } from "@/lib/finance";
 import { standardWorkHours, workingDaysInMonth } from "@/lib/polishHolidays";
 import { Expense, Income, IncomeType, INCOME_TYPE_ICONS, INCOME_TYPES, RecurringExpense, RecurringIncome, SavingsEntry, VAT_RATE } from "@/lib/types";
-import { Sheet, SheetHeader, Field } from "@/components/ui/Sheet";
+import { Sheet, SheetHeader, Field, fieldAria } from "@/components/ui/Sheet";
 import { useToast } from "@/components/ui/Toast";
 import { MonthStats } from "@/components/finance/MonthStats";
-import { AmountWithCurrency, FxInitial, useFx } from "@/components/finance/FxField";
+import { AmountWithCurrency, Fx, FxInitial, useFx } from "@/components/finance/FxField";
 
 export type SheetState =
   | { type: "income" }
@@ -30,7 +31,15 @@ export type SheetState =
   | null;
 
 const inputClass =
-  "text-[14.5px] font-medium text-ink bg-sheet-field-bg border border-border rounded-md px-3 py-2.5 outline-none focus:border-accent tabular-nums";
+  "text-[14.5px] font-medium text-ink bg-sheet-field-bg border border-border rounded-md px-3 py-2.5 outline-none focus:border-accent aria-[invalid=true]:border-critical tabular-nums";
+const checkboxClass = "w-[17px] h-[17px] accent-accent shrink-0";
+const formClass = "flex flex-col gap-3";
+
+const MAX_DESC = 200;
+const MAX_HOURS = 744; // 31 days × 24 h
+
+/** Form values are strings (what the inputs hold); parse on save. */
+const toNumber = (v: string) => parseFloat(String(v).trim().replace(",", ".")) || 0;
 
 type SaveResult = { message: string } | null | undefined;
 
@@ -63,12 +72,11 @@ function useSaver(onClose: () => void) {
   return { busy, save };
 }
 
-function SaveButton({ busy, onClick, label, disabled = false }: { busy: boolean; onClick: () => void; label: string; disabled?: boolean }) {
+function SaveButton({ busy, label, disabled = false }: { busy: boolean; label: string; disabled?: boolean }) {
   const t = useTranslations("common");
   return (
     <button
-      type="button"
-      onClick={onClick}
+      type="submit"
       disabled={busy || disabled}
       className="font-bold text-[14.5px] text-accent-ink bg-accent rounded-md py-3 mb-1 disabled:opacity-60"
     >
@@ -80,36 +88,42 @@ function SaveButton({ busy, onClick, label, disabled = false }: { busy: boolean;
 const fxInitial = (x?: FxInitial): FxInitial | undefined =>
   x ? { currency: x.currency, fx_rate: Number(x.fx_rate), fx_date: x.fx_date, fx_table: x.fx_table } : undefined;
 
-// Start/end month of a recurring template. `endMonth` is the last *inclusive*
-// month shown to the user; the DB stores the exclusive cutoff (month after).
-function useMonthRange(initialStart: string, storedEnd: string | null) {
-  const [startMonth, setStartMonth] = useState(initialStart);
-  const [endMonth, setEndMonth] = useState(storedEnd ? prevMonth(storedEnd) : "");
+/** Checks the NBP rate before saving; returns the fx columns or null after
+ * showing why the rate is missing next to the amount. */
+function useFxGuard(fx: Fx) {
+  const t = useTranslations("fx");
+  const [fxError, setFxError] = useState<string | undefined>();
   return {
-    startMonth,
-    endMonth,
-    changeStart(v: string) {
-      setStartMonth(v);
-      if (endMonth && endMonth < v) setEndMonth(v);
+    fxError: fx.fields ? undefined : fxError,
+    requireFx() {
+      if (fx.fields) return fx.fields;
+      setFxError(t(fx.missingReason ?? "missing"));
+      return null;
     },
-    changeEnd(v: string) {
-      setEndMonth(v && v < startMonth ? startMonth : v);
-    },
-    clearEnd() {
-      setEndMonth("");
-    },
-    storedEnd: endMonth ? nextMonth(endMonth) : null,
   };
 }
 
+// ---------- month range (recurring templates) ----------
+// `endMonth` is the last *inclusive* month shown to the user; the DB stores
+// the exclusive cutoff (the month after) — see storedEnd().
+interface RangeValues {
+  startMonth: string;
+  endMonth: string;
+}
+
+const rangeDefaults = (start: string, storedEnd: string | null): RangeValues => ({
+  startMonth: start,
+  endMonth: storedEnd ? prevMonth(storedEnd) : "",
+});
+
+const storedEnd = (endMonth: string) => (endMonth ? nextMonth(endMonth) : null);
+
 function MonthRangeFields({
-  range,
   idPrefix,
   kind,
   currentMonth,
   onStartChange,
 }: {
-  range: ReturnType<typeof useMonthRange>;
   idPrefix: string;
   kind: "income" | "expense";
   currentMonth: string;
@@ -117,48 +131,65 @@ function MonthRangeFields({
 }) {
   const t = useTranslations("range");
   const tc = useTranslations("common");
+  const tv = useTranslations("validation");
   const { month, monthIn } = useMonthFormat();
-  const { startMonth, endMonth } = range;
+  const { register, control, setValue, getValues, formState } = useFormContext<RangeValues>();
+  const [startMonth, endMonth] = useWatch({ control, name: ["startMonth", "endMonth"] });
+  const startId = `${idPrefix}StartMonth`;
+  const endId = `${idPrefix}EndMonth`;
+  const { errors } = formState;
+
   return (
     <>
       <Field
         label={t("from")}
-        htmlFor={`${idPrefix}StartMonth`}
+        htmlFor={startId}
+        error={errors.startMonth?.message}
         hint={
-          startMonth < currentMonth
-            ? t("fromPastHint", { month: monthIn(startMonth) })
-            : t("fromHint", { kind, month: monthIn(startMonth) })
+          !startMonth
+            ? undefined
+            : startMonth < currentMonth
+              ? t("fromPastHint", { month: monthIn(startMonth) })
+              : t("fromHint", { kind, month: monthIn(startMonth) })
         }
       >
         <input
-          id={`${idPrefix}StartMonth`}
+          id={startId}
           type="month"
-          value={startMonth}
-          onChange={(e) => {
-            range.changeStart(e.target.value);
-            onStartChange?.(e.target.value);
-          }}
+          {...fieldAria(startId, errors.startMonth)}
+          {...register("startMonth", {
+            required: tv("monthRequired"),
+            onChange: (e) => {
+              const v = e.target.value;
+              // Keep the range valid: a start past the end moves the end along.
+              if (v && getValues("endMonth") && getValues("endMonth") < v) setValue("endMonth", v);
+              onStartChange?.(v);
+            },
+          })}
           className={inputClass}
         />
       </Field>
       <Field
         label={t("to")}
-        htmlFor={`${idPrefix}EndMonth`}
+        htmlFor={endId}
+        error={errors.endMonth?.message}
         hint={endMonth ? t("toHint", { last: month(endMonth), next: monthIn(nextMonth(endMonth)) }) : t("toEmptyHint")}
       >
         <div className="flex flex-row gap-2 items-center">
           <input
-            id={`${idPrefix}EndMonth`}
+            id={endId}
             type="month"
             min={startMonth}
-            value={endMonth}
-            onChange={(e) => range.changeEnd(e.target.value)}
+            {...fieldAria(endId, errors.endMonth)}
+            {...register("endMonth", {
+              validate: (v) => !v || !getValues("startMonth") || v >= getValues("startMonth") || tv("endBeforeStart"),
+            })}
             className={inputClass + " flex-1"}
           />
           {endMonth && (
             <button
               type="button"
-              onClick={range.clearEnd}
+              onClick={() => setValue("endMonth", "", { shouldValidate: true })}
               className="text-[12.5px] font-semibold text-ink-muted bg-surface-2 rounded-md px-3 py-2.5 whitespace-nowrap"
             >
               {tc("clear")}
@@ -167,6 +198,35 @@ function MonthRangeFields({
         </div>
       </Field>
     </>
+  );
+}
+
+/** Optional description, shared by every form. */
+function DescField({ id, label, placeholder, hint }: { id: string; label: string; placeholder: string; hint?: string }) {
+  const tv = useTranslations("validation");
+  const { register, formState } = useFormContext<{ desc: string }>();
+  const error = formState.errors.desc;
+  return (
+    <Field label={label} htmlFor={id} hint={hint} error={error?.message}>
+      <input
+        id={id}
+        type="text"
+        {...fieldAria(id, error)}
+        {...register("desc", { maxLength: { value: MAX_DESC, message: tv("descTooLong") } })}
+        className={inputClass}
+        placeholder={placeholder}
+      />
+    </Field>
+  );
+}
+
+/** Optional emoji overriding the category/type default. */
+function IconField({ id, label, hint, placeholder }: { id: string; label: string; hint: string; placeholder: string }) {
+  const { register } = useFormContext<{ icon: string }>();
+  return (
+    <Field label={label} htmlFor={id} hint={hint}>
+      <input id={id} type="text" {...register("icon")} placeholder={placeholder} maxLength={4} className={inputClass + " text-[18px] text-center w-16"} />
+    </Field>
   );
 }
 
@@ -212,6 +272,18 @@ export function FinanceSheets({
 }
 
 // ---------- income ----------
+interface IncomeValues extends RangeValues {
+  type: IncomeType;
+  isRecurring: boolean;
+  month: string;
+  invoiceDate: string;
+  hours: string;
+  desc: string;
+  amount: string;
+  icon: string;
+  applyVat: boolean;
+}
+
 function IncomeForm({
   zd,
   currentMonth,
@@ -227,156 +299,182 @@ function IncomeForm({
 }) {
   const t = useTranslations("incomeForm");
   const tc = useTranslations("common");
+  const tv = useTranslations("validation");
   const typeLabel = useIncomeTypeLabel();
   const { month: monthName } = useMonthFormat();
   const { fmt } = useMoney();
   const { busy, save } = useSaver(onClose);
   const source = editing ?? editingRecurring;
   const isEdit = !!source;
-  const [type, setType] = useState<IncomeType>(source?.type ?? "b2b");
-  const [month, setMonth] = useState(editing?.month ?? currentMonth);
-  const [invoiceDate, setInvoiceDate] = useState(editing?.invoice_date ?? lastDayOfMonth(editing?.month ?? currentMonth));
-  const [invoiceTouched, setInvoiceTouched] = useState(!!editing);
-  const [hours, setHours] = useState(source ? String(source.hours) : "");
-  const [amount, setAmount] = useState(source ? String(source.amount) : "");
-  const [desc, setDesc] = useState(source?.desc ?? "");
-  const [applyVat, setApplyVat] = useState((source?.vat_rate ?? 0) > 0);
-  const [icon, setIcon] = useState(source?.icon ?? "");
-  const [isRecurring, setIsRecurring] = useState(!!editingRecurring);
-  const range = useMonthRange(editingRecurring?.start_month ?? currentMonth, editingRecurring?.end_month ?? null);
-  const hoursMonth = isRecurring ? range.startMonth : month;
+  const form = useForm<IncomeValues>({
+    mode: "onTouched",
+    defaultValues: {
+      type: source?.type ?? "b2b",
+      isRecurring: !!editingRecurring,
+      month: editing?.month ?? currentMonth,
+      invoiceDate: editing?.invoice_date ?? lastDayOfMonth(editing?.month ?? currentMonth),
+      hours: source ? String(source.hours) : "",
+      desc: source?.desc ?? "",
+      amount: source ? String(source.amount) : "",
+      icon: source?.icon ?? "",
+      applyVat: (source?.vat_rate ?? 0) > 0,
+      ...rangeDefaults(editingRecurring?.start_month ?? currentMonth, editingRecurring?.end_month ?? null),
+    },
+  });
+  const { register, control, setValue, getFieldState, handleSubmit, formState } = form;
+  const { errors } = formState;
+  const [type, isRecurring, month, invoiceDate, startMonth, amount, applyVat] = useWatch({
+    control,
+    name: ["type", "isRecurring", "month", "invoiceDate", "startMonth", "amount", "applyVat"],
+  });
+  const hoursMonth = (isRecurring ? startMonth : month) || currentMonth;
   // One-off: rate from the invoice date. Template: from its first month (each
   // month then gets its own rate, see useZoneData).
-  const fx = useFx(isRecurring ? lastDayOfMonth(range.startMonth) : invoiceDate, fxInitial(source));
+  const fx = useFx(isRecurring ? (startMonth ? lastDayOfMonth(startMonth) : "") : invoiceDate, fxInitial(source));
+  const { fxError, requireFx } = useFxGuard(fx);
 
-  const netAmount = parseFloat(amount) || 0;
+  const netAmount = toNumber(amount);
   // Amount is always stored net; VAT is kept as a rate so gross can be shown
   // without ever inflating "na czysto" totals.
   const vatRate = type === "b2b" && applyVat ? VAT_RATE : 0;
 
-  function handleSave() {
-    if (netAmount <= 0 || !fx.fields) return;
-    const fields = { type, hours: parseFloat(hours) || 0, desc: desc.trim(), icon: icon.trim() || null, amount: netAmount, vat_rate: vatRate, ...fx.fields };
-    const templateFields = { ...fields, start_month: range.startMonth, end_month: range.storedEnd };
-    const oneOff = { ...fields, month, invoice_date: invoiceDate };
+  async function onSubmit(v: IncomeValues) {
+    const fxFields = requireFx();
+    if (!fxFields) return;
+    const fields = {
+      type: v.type,
+      hours: toNumber(v.hours),
+      desc: v.desc.trim(),
+      icon: v.icon.trim() || null,
+      amount: toNumber(v.amount),
+      vat_rate: v.type === "b2b" && v.applyVat ? VAT_RATE : 0,
+      ...fxFields,
+    };
+    const templateFields = { ...fields, start_month: v.startMonth, end_month: storedEnd(v.endMonth) };
+    const oneOff = { ...fields, month: v.month, invoice_date: v.invoiceDate };
 
-    if (editing) {
-      save(() => zd.updateIncome(editing.id, oneOff), tc("changesSaved"));
-    } else if (editingRecurring) {
-      save(() => zd.recurringIncomeOps.update(editingRecurring.id, templateFields), tc("changesSaved"));
-    } else if (isRecurring) {
-      save(() => zd.recurringIncomeOps.add(templateFields), t("addedRecurring"));
-    } else {
-      save(() => zd.addIncome(oneOff), t("added"));
-    }
+    if (editing) await save(() => zd.updateIncome(editing.id, oneOff), tc("changesSaved"));
+    else if (editingRecurring) await save(() => zd.recurringIncomeOps.update(editingRecurring.id, templateFields), tc("changesSaved"));
+    else if (v.isRecurring) await save(() => zd.recurringIncomeOps.add(templateFields), t("addedRecurring"));
+    else await save(() => zd.addIncome(oneOff), t("added"));
   }
 
   return (
-    <>
-      <SheetHeader
-        title={editing ? t("editTitle") : editingRecurring ? t("editRecurringTitle") : t("newTitle")}
-        onClose={onClose}
-      />
-      <Field label={t("type")} htmlFor="incType">
-        <select id="incType" value={type} onChange={(e) => setType(e.target.value as IncomeType)} className={inputClass}>
-          {INCOME_TYPES.map((it) => (
-            <option key={it} value={it}>
-              {typeLabel(it)}
-            </option>
-          ))}
-        </select>
-      </Field>
-      {!isEdit && (
-        <label className="flex flex-row items-center gap-2.5" htmlFor="incRecurring">
-          <input id="incRecurring" type="checkbox" checked={isRecurring} onChange={(e) => setIsRecurring(e.target.checked)} className="w-[17px] h-[17px] accent-accent shrink-0" />
-          <span className="text-[13px]">{t("isRecurring")}</span>
-        </label>
-      )}
-      {isRecurring ? (
-        <MonthRangeFields range={range} idPrefix="inc" kind="income" currentMonth={currentMonth} />
-      ) : (
-        <>
-          <Field label={t("month")} htmlFor="incMonth">
-            <input
-              id="incMonth"
-              type="month"
-              value={month}
-              onChange={(e) => {
-                setMonth(e.target.value);
-                if (!invoiceTouched && e.target.value) setInvoiceDate(lastDayOfMonth(e.target.value));
-              }}
-              className={inputClass}
-            />
-          </Field>
-          <Field label={t("invoiceDate")} htmlFor="incInvoiceDate" hint={t("invoiceDateHint")}>
-            <input
-              id="incInvoiceDate"
-              type="date"
-              value={invoiceDate}
-              onChange={(e) => {
-                setInvoiceDate(e.target.value);
-                setInvoiceTouched(true);
-              }}
-              className={inputClass}
-            />
-          </Field>
-        </>
-      )}
-      {type === "b2b" && (
-        <Field
-          label={t("hours")}
-          htmlFor="incHours"
-          hint={isRecurring ? t("hoursRecurringHint") : t("hoursHint")}
-        >
-          <div className="flex flex-row gap-2 items-center">
-            <input id="incHours" type="number" min={0} step={1} value={hours} onChange={(e) => setHours(e.target.value)} className={inputClass + " flex-1"} placeholder="0" />
-            <button
-              type="button"
-              onClick={() => setHours(String(standardWorkHours(hoursMonth)))}
-              className="text-[12.5px] font-semibold text-accent bg-accent-soft rounded-md px-3 py-2.5 whitespace-nowrap"
-            >
-              {t("fromWorkingDays")}
-            </button>
-          </div>
-          <div className="text-[11.5px] text-ink-muted mt-1">
-            {t("workingDays", { month: monthName(hoursMonth), days: workingDaysInMonth(hoursMonth), hours: standardWorkHours(hoursMonth) })}
-          </div>
+    <FormProvider {...form}>
+      <form onSubmit={handleSubmit(onSubmit)} noValidate className={formClass}>
+        <SheetHeader title={editing ? t("editTitle") : editingRecurring ? t("editRecurringTitle") : t("newTitle")} onClose={onClose} />
+        <Field label={t("type")} htmlFor="incType">
+          <select id="incType" {...register("type")} className={inputClass}>
+            {INCOME_TYPES.map((it) => (
+              <option key={it} value={it}>
+                {typeLabel(it)}
+              </option>
+            ))}
+          </select>
         </Field>
-      )}
-      {(type !== "b2b" || isRecurring) && (
-        <Field label={t("desc")} htmlFor="incDesc">
-          <input id="incDesc" type="text" value={desc} onChange={(e) => setDesc(e.target.value)} className={inputClass} placeholder={isRecurring ? t("descRecurringPlaceholder") : t("descPlaceholder")} />
-        </Field>
-      )}
-      <AmountWithCurrency id="incAmount" label={t("netAmount")} amount={amount} setAmount={setAmount} fx={fx} />
-      <Field label={t("icon")} htmlFor="incIcon" hint={t("iconHint", { icon: INCOME_TYPE_ICONS[type] })}>
-        <input
-          id="incIcon"
-          type="text"
-          value={icon}
-          onChange={(e) => setIcon(e.target.value)}
-          placeholder={INCOME_TYPE_ICONS[type]}
-          maxLength={4}
-          className={inputClass + " text-[18px] text-center w-16"}
-        />
-      </Field>
-      {type === "b2b" && (
-        <label className="flex flex-row items-center gap-2.5" htmlFor="incVat">
-          <input id="incVat" type="checkbox" checked={applyVat} onChange={(e) => setApplyVat(e.target.checked)} className="w-[17px] h-[17px] accent-accent shrink-0" />
-          <span className="text-[13px]">{t("withVat")}</span>
-        </label>
-      )}
-      {vatRate > 0 && netAmount > 0 && (
-        <div className="text-[12px] text-ink-muted">
-          {t("vatNote", { gross: fmt(grossAmount({ amount: netAmount, vat_rate: vatRate }), 2, fx.currency), net: fmt(netAmount, 2, fx.currency) })}
-        </div>
-      )}
-      <SaveButton busy={busy} disabled={!fx.fields} onClick={handleSave} label={isEdit ? tc("saveChanges") : tc("save")} />
-    </>
+        {!isEdit && (
+          <label className="flex flex-row items-center gap-2.5" htmlFor="incRecurring">
+            <input id="incRecurring" type="checkbox" {...register("isRecurring")} className={checkboxClass} />
+            <span className="text-[13px]">{t("isRecurring")}</span>
+          </label>
+        )}
+        {isRecurring ? (
+          <MonthRangeFields idPrefix="inc" kind="income" currentMonth={currentMonth} />
+        ) : (
+          <>
+            <Field label={t("month")} htmlFor="incMonth" error={errors.month?.message}>
+              <input
+                id="incMonth"
+                type="month"
+                {...fieldAria("incMonth", errors.month)}
+                {...register("month", {
+                  required: tv("monthRequired"),
+                  onChange: (e) => {
+                    // The invoice date follows the month until edited by hand
+                    // (and never moves on its own when editing a saved income).
+                    if (!editing && !getFieldState("invoiceDate").isDirty && e.target.value) {
+                      setValue("invoiceDate", lastDayOfMonth(e.target.value));
+                    }
+                  },
+                })}
+                className={inputClass}
+              />
+            </Field>
+            <Field label={t("invoiceDate")} htmlFor="incInvoiceDate" hint={t("invoiceDateHint")} error={errors.invoiceDate?.message}>
+              <input
+                id="incInvoiceDate"
+                type="date"
+                {...fieldAria("incInvoiceDate", errors.invoiceDate)}
+                {...register("invoiceDate", { required: tv("dateRequired") })}
+                className={inputClass}
+              />
+            </Field>
+          </>
+        )}
+        {type === "b2b" && (
+          <Field label={t("hours")} htmlFor="incHours" hint={isRecurring ? t("hoursRecurringHint") : t("hoursHint")} error={errors.hours?.message}>
+            <div className="flex flex-row gap-2 items-center">
+              <input
+                id="incHours"
+                type="text"
+                inputMode="decimal"
+                {...fieldAria("incHours", errors.hours)}
+                {...register("hours", {
+                  validate: (h) => {
+                    if (!String(h).trim()) return true;
+                    const n = Number(String(h).replace(",", "."));
+                    return (Number.isFinite(n) && n >= 0 && n <= MAX_HOURS) || tv("hoursRange");
+                  },
+                })}
+                className={inputClass + " flex-1"}
+                placeholder="0"
+              />
+              <button
+                type="button"
+                onClick={() => setValue("hours", String(standardWorkHours(hoursMonth)), { shouldValidate: true, shouldDirty: true })}
+                className="text-[12.5px] font-semibold text-accent bg-accent-soft rounded-md px-3 py-2.5 whitespace-nowrap"
+              >
+                {t("fromWorkingDays")}
+              </button>
+            </div>
+            <div className="text-[11.5px] text-ink-muted mt-1">
+              {t("workingDays", { month: monthName(hoursMonth), days: workingDaysInMonth(hoursMonth), hours: standardWorkHours(hoursMonth) })}
+            </div>
+          </Field>
+        )}
+        {(type !== "b2b" || isRecurring) && (
+          <DescField id="incDesc" label={t("desc")} placeholder={isRecurring ? t("descRecurringPlaceholder") : t("descPlaceholder")} />
+        )}
+        <AmountWithCurrency id="incAmount" label={t("netAmount")} fx={fx} fxError={fxError} />
+        <IconField id="incIcon" label={t("icon")} hint={t("iconHint", { icon: INCOME_TYPE_ICONS[type] })} placeholder={INCOME_TYPE_ICONS[type]} />
+        {type === "b2b" && (
+          <label className="flex flex-row items-center gap-2.5" htmlFor="incVat">
+            <input id="incVat" type="checkbox" {...register("applyVat")} className={checkboxClass} />
+            <span className="text-[13px]">{t("withVat")}</span>
+          </label>
+        )}
+        {vatRate > 0 && netAmount > 0 && (
+          <div className="text-[12px] text-ink-muted">
+            {t("vatNote", { gross: fmt(grossAmount({ amount: netAmount, vat_rate: vatRate }), 2, fx.currency), net: fmt(netAmount, 2, fx.currency) })}
+          </div>
+        )}
+        <SaveButton busy={busy} disabled={fx.loading} label={isEdit ? tc("saveChanges") : tc("save")} />
+      </form>
+    </FormProvider>
   );
 }
 
 // ---------- expense ----------
+interface ExpenseValues extends RangeValues {
+  categoryId: string;
+  desc: string;
+  amount: string;
+  icon: string;
+  isRecurring: boolean;
+  dayOfMonth: string;
+  date: string;
+}
+
 function ExpenseForm({
   zd,
   currentMonth,
@@ -392,118 +490,120 @@ function ExpenseForm({
 }) {
   const t = useTranslations("expenseForm");
   const tc = useTranslations("common");
+  const tv = useTranslations("validation");
   const { busy, save } = useSaver(onClose);
   const categories = useCategories();
-  const [pickedCategory, setCategory] = useState<string>(editingExpense?.category_id ?? editingRecurring?.category_id ?? "");
+  const source = editingExpense ?? editingRecurring;
+  const form = useForm<ExpenseValues>({
+    mode: "onTouched",
+    defaultValues: {
+      categoryId: source?.category_id ?? "",
+      desc: source?.desc ?? "",
+      amount: source ? String(source.amount) : "",
+      icon: source?.icon ?? "",
+      isRecurring: !!editingRecurring,
+      dayOfMonth: editingRecurring ? String(editingRecurring.day_of_month) : "1",
+      date: editingExpense?.date ?? todayStr(),
+      ...rangeDefaults(editingRecurring?.start_month ?? currentMonth, editingRecurring?.end_month ?? null),
+    },
+  });
+  const { register, control, setValue, getValues, handleSubmit, formState } = form;
+  const { errors } = formState;
+  const [pickedCategory, isRecurring, dayOfMonth, startMonth, date] = useWatch({
+    control,
+    name: ["categoryId", "isRecurring", "dayOfMonth", "startMonth", "date"],
+  });
   // Until the user picks one, default to the first category once the list loads.
   const categoryId = pickedCategory || categories.list[0]?.id || "";
-  const [desc, setDesc] = useState(editingExpense?.desc ?? editingRecurring?.desc ?? "");
-  const [amount, setAmount] = useState(
-    editingExpense ? String(editingExpense.amount) : editingRecurring ? String(editingRecurring.amount) : ""
-  );
-  const [date, setDate] = useState(editingExpense?.date ?? todayStr());
-  const [icon, setIcon] = useState(editingExpense?.icon ?? editingRecurring?.icon ?? "");
-  const [isRecurring, setIsRecurring] = useState(!!editingRecurring);
-  const [dayOfMonth, setDayOfMonth] = useState(editingRecurring ? String(editingRecurring.day_of_month) : "1");
-  const range = useMonthRange(editingRecurring?.start_month ?? currentMonth, editingRecurring?.end_month ?? null);
-  const maxDay = daysInMonth(range.startMonth);
-  const templateDate = `${range.startMonth}-${pad2(Math.min(parseInt(dayOfMonth, 10) || 1, maxDay))}`;
-  const fx = useFx(isRecurring ? templateDate : date, fxInitial(editingExpense ?? editingRecurring));
+  const maxDay = daysInMonth(startMonth || currentMonth);
+  const templateDate = startMonth ? `${startMonth}-${pad2(Math.min(parseInt(dayOfMonth, 10) || 1, maxDay))}` : "";
+  const fx = useFx(isRecurring ? templateDate : date, fxInitial(source));
+  const { fxError, requireFx } = useFxGuard(fx);
   const selectedCategoryIcon = categories.icon(categoryId) ?? "📦";
 
   function clampDayTo(month: string) {
-    if (parseInt(dayOfMonth, 10) > daysInMonth(month)) setDayOfMonth(String(daysInMonth(month)));
+    if (month && parseInt(getValues("dayOfMonth"), 10) > daysInMonth(month)) setValue("dayOfMonth", String(daysInMonth(month)));
   }
 
-  function handleSave() {
-    const value = parseFloat(amount) || 0;
-    if (value <= 0 || !fx.fields) return;
-    const common = { category_id: categoryId, desc: desc.trim(), amount: value, icon: icon.trim() || null, ...fx.fields };
+  async function onSubmit(v: ExpenseValues) {
+    const fxFields = requireFx();
+    if (!fxFields) return;
+    const common = { category_id: v.categoryId || categoryId, desc: v.desc.trim(), amount: toNumber(v.amount), icon: v.icon.trim() || null, ...fxFields };
     const recurringFields = {
       ...common,
-      day_of_month: parseInt(dayOfMonth, 10) || 1,
-      start_month: range.startMonth,
-      end_month: range.storedEnd,
+      day_of_month: parseInt(v.dayOfMonth, 10) || 1,
+      start_month: v.startMonth,
+      end_month: storedEnd(v.endMonth),
     };
 
-    if (editingExpense) {
-      save(() => zd.updateExpense(editingExpense.id, { ...common, date }), tc("changesSaved"));
-    } else if (editingRecurring) {
-      save(() => zd.recurringExpenseOps.update(editingRecurring.id, recurringFields), tc("changesSaved"));
-    } else if (isRecurring) {
-      save(() => zd.recurringExpenseOps.add(recurringFields), t("addedRecurring"));
-    } else {
-      save(() => zd.addExpense({ ...common, date }), t("added"));
-    }
+    if (editingExpense) await save(() => zd.updateExpense(editingExpense.id, { ...common, date: v.date }), tc("changesSaved"));
+    else if (editingRecurring) await save(() => zd.recurringExpenseOps.update(editingRecurring.id, recurringFields), tc("changesSaved"));
+    else if (v.isRecurring) await save(() => zd.recurringExpenseOps.add(recurringFields), t("addedRecurring"));
+    else await save(() => zd.addExpense({ ...common, date: v.date }), t("added"));
   }
 
   return (
-    <>
-      <SheetHeader
-        title={editingExpense ? t("editTitle") : editingRecurring ? t("editRecurringTitle") : t("newTitle")}
-        onClose={onClose}
-      />
-      <Field label={t("category")} htmlFor="expCategory">
-        <select id="expCategory" value={categoryId} onChange={(e) => setCategory(e.target.value)} className={inputClass}>
-          {categories.list.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.icon} {categories.name(c.id)}
-            </option>
-          ))}
-        </select>
-      </Field>
-      <Field label={t("desc")} htmlFor="expDesc">
-        <input id="expDesc" type="text" value={desc} onChange={(e) => setDesc(e.target.value)} className={inputClass} placeholder={t("descPlaceholder")} />
-      </Field>
-      <AmountWithCurrency id="expAmount" label={t("amount")} amount={amount} setAmount={setAmount} fx={fx} />
-      <Field label={t("icon")} htmlFor="expIcon" hint={t("iconHint", { icon: selectedCategoryIcon })}>
-        <input
-          id="expIcon"
-          type="text"
-          value={icon}
-          onChange={(e) => setIcon(e.target.value)}
-          placeholder={selectedCategoryIcon}
-          maxLength={4}
-          className={inputClass + " text-[18px] text-center w-16"}
-        />
-      </Field>
-
-      {!editingExpense && !editingRecurring && (
-        <label className="flex flex-row items-center gap-2.5" htmlFor="expRecurring">
-          <input id="expRecurring" type="checkbox" checked={isRecurring} onChange={(e) => setIsRecurring(e.target.checked)} className="w-[17px] h-[17px] accent-accent shrink-0" />
-          <span className="text-[13px]">{t("isRecurring")}</span>
-        </label>
-      )}
-
-      {isRecurring ? (
-        <>
-          <Field
-            label={t("dayOfMonth")}
-            htmlFor="expDay"
-            hint={parseInt(dayOfMonth, 10) > 28 ? t("dayOfMonthHint") : undefined}
+    <FormProvider {...form}>
+      <form onSubmit={handleSubmit(onSubmit)} noValidate className={formClass}>
+        <SheetHeader title={editingExpense ? t("editTitle") : editingRecurring ? t("editRecurringTitle") : t("newTitle")} onClose={onClose} />
+        <Field label={t("category")} htmlFor="expCategory" error={errors.categoryId?.message}>
+          <select
+            id="expCategory"
+            {...register("categoryId", { validate: () => !!categoryId || tv("categoryRequired") })}
+            value={categoryId}
+            className={inputClass}
           >
-            <select id="expDay" value={dayOfMonth} onChange={(e) => setDayOfMonth(e.target.value)} className={inputClass}>
-              {Array.from({ length: maxDay }, (_, i) => i + 1).map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <MonthRangeFields range={range} idPrefix="exp" kind="expense" currentMonth={currentMonth} onStartChange={clampDayTo} />
-        </>
-      ) : (
-        <Field label={t("date")} htmlFor="expDate">
-          <input id="expDate" type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputClass} />
+            {categories.list.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.icon} {categories.name(c.id)}
+              </option>
+            ))}
+          </select>
         </Field>
-      )}
+        <DescField id="expDesc" label={t("desc")} placeholder={t("descPlaceholder")} />
+        <AmountWithCurrency id="expAmount" label={t("amount")} fx={fx} fxError={fxError} />
+        <IconField id="expIcon" label={t("icon")} hint={t("iconHint", { icon: selectedCategoryIcon })} placeholder={selectedCategoryIcon} />
 
-      <SaveButton busy={busy} disabled={!fx.fields} onClick={handleSave} label={editingExpense || editingRecurring ? tc("saveChanges") : tc("save")} />
-    </>
+        {!source && (
+          <label className="flex flex-row items-center gap-2.5" htmlFor="expRecurring">
+            <input id="expRecurring" type="checkbox" {...register("isRecurring")} className={checkboxClass} />
+            <span className="text-[13px]">{t("isRecurring")}</span>
+          </label>
+        )}
+
+        {isRecurring ? (
+          <>
+            <Field label={t("dayOfMonth")} htmlFor="expDay" hint={parseInt(dayOfMonth, 10) > 28 ? t("dayOfMonthHint") : undefined}>
+              <select id="expDay" {...register("dayOfMonth")} className={inputClass}>
+                {Array.from({ length: maxDay }, (_, i) => i + 1).map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <MonthRangeFields idPrefix="exp" kind="expense" currentMonth={currentMonth} onStartChange={clampDayTo} />
+          </>
+        ) : (
+          <Field label={t("date")} htmlFor="expDate" error={errors.date?.message}>
+            <input id="expDate" type="date" {...fieldAria("expDate", errors.date)} {...register("date", { required: tv("dateRequired") })} className={inputClass} />
+          </Field>
+        )}
+
+        <SaveButton busy={busy} disabled={fx.loading} label={source ? tc("saveChanges") : tc("save")} />
+      </form>
+    </FormProvider>
   );
 }
 
 // ---------- savings ----------
+interface SavingsValues {
+  date: string;
+  desc: string;
+  amount: string;
+  withdraw: boolean;
+}
+
 function SavingsForm({
   zd,
   onClose,
@@ -515,106 +615,141 @@ function SavingsForm({
 }) {
   const t = useTranslations("savingsForm");
   const tc = useTranslations("common");
+  const tv = useTranslations("validation");
   const { busy, save } = useSaver(onClose);
-  const [date, setDate] = useState(editing?.date ?? todayStr());
-  const [desc, setDesc] = useState(editing?.desc ?? "");
-  const [amount, setAmount] = useState(editing ? String(Math.abs(editing.amount)) : "");
-  const [withdraw, setWithdraw] = useState(editing ? editing.amount < 0 : false);
-  const fx = useFx(date, fxInitial(editing));
+  const form = useForm<SavingsValues>({
+    mode: "onTouched",
+    defaultValues: {
+      date: editing?.date ?? todayStr(),
+      desc: editing?.desc ?? "",
+      amount: editing ? String(Math.abs(editing.amount)) : "",
+      withdraw: editing ? editing.amount < 0 : false,
+    },
+  });
+  const { register, control, handleSubmit, formState } = form;
+  const fx = useFx(useWatch({ control, name: "date" }), fxInitial(editing));
+  const { fxError, requireFx } = useFxGuard(fx);
 
-  function handleSave() {
-    const value = parseFloat(amount) || 0;
-    if (value <= 0) return;
-    if (!fx.fields) return;
-    const fields = { date, desc: desc.trim(), amount: withdraw ? -value : value, ...fx.fields };
-    if (editing) {
-      save(() => zd.updateSavingsEntry(editing.id, fields), tc("changesSaved"));
-    } else {
-      save(() => zd.addSavingsEntry(fields), tc("saved"));
-    }
+  async function onSubmit(v: SavingsValues) {
+    const fxFields = requireFx();
+    if (!fxFields) return;
+    const value = toNumber(v.amount);
+    const fields = { date: v.date, desc: v.desc.trim(), amount: v.withdraw ? -value : value, ...fxFields };
+    if (editing) await save(() => zd.updateSavingsEntry(editing.id, fields), tc("changesSaved"));
+    else await save(() => zd.addSavingsEntry(fields), tc("saved"));
   }
 
   return (
-    <>
-      <SheetHeader title={editing ? t("editTitle") : t("newTitle")} onClose={onClose} />
-      <Field label={t("date")} htmlFor="savDate">
-        <input id="savDate" type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputClass} />
-      </Field>
-      <Field label={t("desc")} htmlFor="savDesc" hint={t("descHint")}>
-        <input id="savDesc" type="text" value={desc} onChange={(e) => setDesc(e.target.value)} className={inputClass} placeholder={t("descPlaceholder")} />
-      </Field>
-      <AmountWithCurrency id="savAmount" label={t("amount")} amount={amount} setAmount={setAmount} fx={fx} />
-      <label className="flex flex-row items-center gap-2.5" htmlFor="savWithdraw">
-        <input id="savWithdraw" type="checkbox" checked={withdraw} onChange={(e) => setWithdraw(e.target.checked)} className="w-[17px] h-[17px] accent-accent shrink-0" />
-        <span className="text-[13px]">{t("withdraw")}</span>
-      </label>
-      <SaveButton busy={busy} disabled={!fx.fields} onClick={handleSave} label={editing ? tc("saveChanges") : tc("save")} />
-    </>
+    <FormProvider {...form}>
+      <form onSubmit={handleSubmit(onSubmit)} noValidate className={formClass}>
+        <SheetHeader title={editing ? t("editTitle") : t("newTitle")} onClose={onClose} />
+        <Field label={t("date")} htmlFor="savDate" error={formState.errors.date?.message}>
+          <input id="savDate" type="date" {...fieldAria("savDate", formState.errors.date)} {...register("date", { required: tv("dateRequired") })} className={inputClass} />
+        </Field>
+        <DescField id="savDesc" label={t("desc")} hint={t("descHint")} placeholder={t("descPlaceholder")} />
+        <AmountWithCurrency id="savAmount" label={t("amount")} fx={fx} fxError={fxError} />
+        <label className="flex flex-row items-center gap-2.5" htmlFor="savWithdraw">
+          <input id="savWithdraw" type="checkbox" {...register("withdraw")} className={checkboxClass} />
+          <span className="text-[13px]">{t("withdraw")}</span>
+        </label>
+        <SaveButton busy={busy} disabled={fx.loading} label={editing ? tc("saveChanges") : tc("save")} />
+      </form>
+    </FormProvider>
   );
 }
+
+/** A non-negative amount with at most 2 decimals ("" allowed where noted). */
+const MONEY_PATTERN = /^\d+([.,]\d{1,2})?$/;
 
 function EditInitialForm({ zd, onClose }: { zd: ReturnType<typeof useZoneData>; onClose: () => void }) {
   const t = useTranslations("savingsForm");
   const tc = useTranslations("common");
+  const tv = useTranslations("validation");
   const { busy, save } = useSaver(onClose);
-  const [value, setValue] = useState(String(zd.savingsInitial || 0));
+  const { register, handleSubmit, formState } = useForm<{ initial: string }>({
+    mode: "onTouched",
+    defaultValues: { initial: String(zd.savingsInitial || 0) },
+  });
+  const error = formState.errors.initial;
 
-  function handleSave() {
-    save(() => zd.setSavingsInitial(parseFloat(value) || 0), t("initialSaved"));
+  async function onSubmit(v: { initial: string }) {
+    await save(() => zd.setSavingsInitial(toNumber(v.initial)), t("initialSaved"));
   }
 
   return (
-    <>
+    <form onSubmit={handleSubmit(onSubmit)} noValidate className={formClass}>
       <SheetHeader title={t("initialTitle")} onClose={onClose} />
-      <Field label={t("initial")} htmlFor="initialAmount" hint={t("initialHint")}>
-        <input id="initialAmount" type="number" min={0} step={0.01} value={value} onChange={(e) => setValue(e.target.value)} className={inputClass} />
+      <Field label={t("initial")} htmlFor="initialAmount" hint={t("initialHint")} error={error?.message}>
+        <input
+          id="initialAmount"
+          type="text"
+          inputMode="decimal"
+          {...fieldAria("initialAmount", error)}
+          {...register("initial", { validate: (v) => MONEY_PATTERN.test(String(v).trim()) || tv("initialInvalid") })}
+          className={inputClass}
+        />
       </Field>
-      <SaveButton busy={busy} onClick={handleSave} label={tc("save")} />
-    </>
+      <SaveButton busy={busy} label={tc("save")} />
+    </form>
   );
 }
 
 // ---------- monthly budgets ----------
 function BudgetsForm({ zd, onClose }: { zd: ReturnType<typeof useZoneData>; onClose: () => void }) {
   const t = useTranslations("budgetsForm");
+  const tv = useTranslations("validation");
   const { busy, save } = useSaver(onClose);
   const categories = useCategories();
-  const [values, setValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(zd.budgets.map((b) => [b.category_id, String(b.amount)]))
-  );
+  // Keyed by category id; "" means "don't track this category".
+  const { register, handleSubmit, formState } = useForm<{ limits: Record<string, string> }>({
+    mode: "onTouched",
+    defaultValues: { limits: Object.fromEntries(zd.budgets.map((b) => [b.category_id, String(b.amount)])) },
+  });
 
-  function handleSave() {
-    const limits = Object.fromEntries(
-      Object.entries(values).map(([category, raw]) => [category, parseFloat(raw) || 0])
-    );
-    save(() => zd.saveBudgets(limits), t("saved"));
+  async function onSubmit(v: { limits: Record<string, string> }) {
+    const limits = Object.fromEntries(Object.entries(v.limits ?? {}).map(([category, raw]) => [category, toNumber(raw ?? "")]));
+    await save(() => zd.saveBudgets(limits), t("saved"));
   }
 
   return (
-    <>
+    <form onSubmit={handleSubmit(onSubmit)} noValidate className={formClass}>
       <SheetHeader title={t("title")} onClose={onClose} />
       <div className="text-[12.5px] text-ink-muted -mt-1">{t("intro")}</div>
       <div className="flex flex-col gap-2">
-        {categories.list.map((c) => (
-          <label key={c.id} htmlFor={`budget-${c.key}`} className="flex items-center gap-2.5">
-            <span className="text-[17px] w-6 text-center shrink-0">{c.icon}</span>
-            <span className="flex-1 text-[13px] font-medium truncate">{categories.name(c.id)}</span>
-            <input
-              id={`budget-${c.key}`}
-              type="number"
-              min={0}
-              step={1}
-              inputMode="decimal"
-              value={values[c.id] ?? ""}
-              onChange={(e) => setValues((prev) => ({ ...prev, [c.id]: e.target.value }))}
-              placeholder={t("none")}
-              className={inputClass + " w-28 text-right py-2"}
-            />
-          </label>
-        ))}
+        {categories.list.map((c) => {
+          const id = `budget-${c.key}`;
+          const error = formState.errors.limits?.[c.id];
+          return (
+            <div key={c.id} className="flex flex-col gap-1">
+              <label htmlFor={id} className="flex items-center gap-2.5">
+                <span className="text-[17px] w-6 text-center shrink-0">{c.icon}</span>
+                <span className="flex-1 text-[13px] font-medium truncate">{categories.name(c.id)}</span>
+                <input
+                  id={id}
+                  type="text"
+                  inputMode="decimal"
+                  {...fieldAria(id, error)}
+                  {...register(`limits.${c.id}`, {
+                    validate: (raw) => {
+                      const s = String(raw ?? "").trim();
+                      return !s || (MONEY_PATTERN.test(s) && toNumber(s) > 0) || tv("budgetInvalid");
+                    },
+                  })}
+                  placeholder={t("none")}
+                  className={inputClass + " w-28 text-right py-2"}
+                />
+              </label>
+              {error && (
+                <span id={`${id}-error`} role="alert" className="text-[11.5px] text-critical text-right">
+                  {error.message}
+                </span>
+              )}
+            </div>
+          );
+        })}
       </div>
-      <SaveButton busy={busy} onClick={handleSave} label={t("save")} />
-    </>
+      <SaveButton busy={busy} label={t("save")} />
+    </form>
   );
 }
 

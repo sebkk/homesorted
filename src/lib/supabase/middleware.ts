@@ -44,6 +44,8 @@ export async function updateSession(request: NextRequest) {
   if (!user && !isAuthRoute && !isAuthCallback && !isPublicAsset && request.nextUrl.pathname !== "/") {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
+    // No session on the reset page means the reset link didn't sign them in.
+    url.search = request.nextUrl.pathname === "/reset-password" ? "?notice=resetError" : "";
     return NextResponse.redirect(url);
   }
 

@@ -131,7 +131,9 @@
     "missing": "Brak kursu NBP dla tej daty — wpisz kurs ręcznie.",
     "manualNote": "kurs wpisany ręcznie",
     "manualLabel": "Kurs ręcznie:",
-    "manualPlaceholder": "z NBP"
+    "manualPlaceholder": "z NBP",
+    "rateInvalid": "Kurs musi być liczbą większą od 0, np. 4,2512.",
+    "rateLoading": "Poczekaj chwilę — pobieram kurs NBP."
   },
   "csv": {
     "income": "Zarobek",
@@ -278,7 +280,28 @@
     "namePlaceholder": "np. Finanse firmowe",
     "currency": "Waluta domyślna",
     "currencyHint": "Wszystkie sumy w strefie będą w tej walucie. Wpisy w innych walutach przeliczymy po kursie NBP. Można ją wybrać tylko przy tworzeniu strefy.",
-    "create": "Utwórz"
+    "create": "Utwórz",
+    "editZone": "Edytuj strefę {name}",
+    "editTitle": "Edytuj strefę",
+    "saveName": "Zapisz nazwę",
+    "saving": "Zapisywanie…",
+    "creating": "Tworzenie…",
+    "currencyLocked": "Waluta strefy: {currency} — wybiera się ją tylko przy tworzeniu strefy.",
+    "renamed": "Zmieniono nazwę na „{name}”",
+    "delete": "Usuń strefę",
+    "deleteWarning": "Usunięcie strefy <b>{name}</b> usunie też wszystkie jej zarobki, wydatki, pozycje stałe, oszczędności i budżety. Tego nie da się cofnąć.",
+    "cancel": "Anuluj",
+    "confirmDelete": "Tak, usuń",
+    "deleting": "Usuwanie…",
+    "deleted": "Usunięto strefę „{name}”",
+    "validation": {
+      "nameRequired": "Podaj nazwę strefy.",
+      "nameTooLong": "Nazwa może mieć maksymalnie {max} znaków."
+    },
+    "errors": {
+      "saveFailed": "Nie udało się zapisać. Spróbuj ponownie.",
+      "deleteFailed": "Nie udało się usunąć strefy. Spróbuj ponownie."
+    }
   },
   "launcher": {
     "hello": "Cześć, {name}",
@@ -320,7 +343,8 @@
     "footer": "Twoje dane trzymane są w Supabase i zsynchronizują się między urządzeniami.",
     "notices": {
       "confirmed": "Adres e-mail potwierdzony. Możesz się zalogować.",
-      "confirmError": "Link potwierdzający wygasł lub jest nieprawidłowy. Zaloguj się, a wyślemy nowy."
+      "confirmError": "Link potwierdzający wygasł lub jest nieprawidłowy. Zaloguj się, a wyślemy nowy.",
+      "resetError": "Link do zmiany hasła wygasł, był już użyty albo otwarto go w innej przeglądarce. Poproś o nowy przez „Nie pamiętasz hasła?”."
     },
     "validation": {
       "emailRequired": "Podaj adres e-mail.",
@@ -340,7 +364,14 @@
       "rateLimit": "Za dużo prób. Spróbuj ponownie za kilka minut.",
       "network": "Brak połączenia z serwerem. Sprawdź internet i spróbuj ponownie.",
       "generic": "Coś poszło nie tak. Spróbuj ponownie."
-    }
+    },
+    "forgotLink": "Nie pamiętasz hasła?",
+    "forgotIntro": "Podaj adres e-mail konta — wyślemy link do ustawienia nowego hasła.",
+    "sendResetLink": "Wyślij link",
+    "sending": "Wysyłanie…",
+    "rememberedQuestion": "Pamiętasz hasło?",
+    "forgotSentBody": "Jeśli konto z adresem <b>{email}</b> istnieje, wysłaliśmy na nie link do ustawienia nowego hasła.",
+    "forgotSentHint": "Otwórz link w tej samej przeglądarce, w której o niego prosisz. Nie widzisz wiadomości? Sprawdź folder spam."
   },
   "yearSummary": {
     "prev": "Poprzedni rok",
@@ -428,6 +459,42 @@
       "weak": "Hasło jest za słabe. Użyj dłuższego hasła.",
       "rateLimit": "Za dużo prób. Spróbuj ponownie za kilka minut.",
       "generic": "Nie udało się zapisać. Spróbuj ponownie."
+    }
+  },
+  "validation": {
+    "amountRequired": "Podaj kwotę.",
+    "amountFormat": "Wpisz kwotę jako liczbę, np. 120 albo 120,50 (maks. 2 miejsca po przecinku).",
+    "amountPositive": "Kwota musi być większa od 0.",
+    "hoursRange": "Podaj liczbę godzin od 0 do 744.",
+    "dateRequired": "Wybierz datę.",
+    "monthRequired": "Wybierz miesiąc.",
+    "endBeforeStart": "Ostatni miesiąc nie może być wcześniejszy niż pierwszy.",
+    "descTooLong": "Opis może mieć maksymalnie 200 znaków.",
+    "initialInvalid": "Wpisz kwotę 0 lub większą, np. 5000 albo 5000,50.",
+    "budgetInvalid": "Wpisz limit jako liczbę większą od 0 albo zostaw puste.",
+    "categoryRequired": "Wybierz kategorię."
+  },
+  "resetPassword": {
+    "title": "Nowe hasło",
+    "intro": "Ustaw nowe hasło dla konta <b>{email}</b>.",
+    "password": "Nowe hasło",
+    "confirm": "Powtórz nowe hasło",
+    "hint": "Co najmniej {min} znaków.",
+    "submit": "Ustaw nowe hasło",
+    "saving": "Zapisywanie…",
+    "done": "Hasło zostało zmienione. Jesteś zalogowany/a.",
+    "goToApp": "Przejdź do aplikacji",
+    "validation": {
+      "required": "Podaj nowe hasło.",
+      "tooShort": "Hasło musi mieć co najmniej {min} znaków.",
+      "confirmRequired": "Powtórz nowe hasło.",
+      "mismatch": "Hasła nie są takie same."
+    },
+    "errors": {
+      "same": "Nowe hasło musi się różnić od poprzedniego.",
+      "weak": "Hasło jest za słabe. Użyj dłuższego hasła.",
+      "expired": "Sesja zmiany hasła wygasła. Poproś o nowy link.",
+      "generic": "Nie udało się zmienić hasła. Spróbuj ponownie."
     }
   }
 }

@@ -131,7 +131,9 @@
     "missing": "No NBP rate for this date — enter the rate manually.",
     "manualNote": "rate entered manually",
     "manualLabel": "Manual rate:",
-    "manualPlaceholder": "from NBP"
+    "manualPlaceholder": "from NBP",
+    "rateInvalid": "The rate must be a number greater than 0, e.g. 4.2512.",
+    "rateLoading": "One moment — fetching the NBP rate."
   },
   "csv": {
     "income": "Income",
@@ -278,7 +280,28 @@
     "namePlaceholder": "e.g. Business finances",
     "currency": "Default currency",
     "currencyHint": "Every total in the zone is shown in this currency. Entries in other currencies are converted at the NBP rate. It can only be chosen when creating the zone.",
-    "create": "Create"
+    "create": "Create",
+    "editZone": "Edit zone {name}",
+    "editTitle": "Edit zone",
+    "saveName": "Save name",
+    "saving": "Saving…",
+    "creating": "Creating…",
+    "currencyLocked": "Zone currency: {currency} — it can only be chosen when creating the zone.",
+    "renamed": "Renamed to “{name}”",
+    "delete": "Delete zone",
+    "deleteWarning": "Deleting <b>{name}</b> also deletes all its income, expenses, recurring items, savings and budgets. This can't be undone.",
+    "cancel": "Cancel",
+    "confirmDelete": "Yes, delete",
+    "deleting": "Deleting…",
+    "deleted": "Deleted zone “{name}”",
+    "validation": {
+      "nameRequired": "Enter a zone name.",
+      "nameTooLong": "The name can be at most {max} characters."
+    },
+    "errors": {
+      "saveFailed": "Couldn't save. Please try again.",
+      "deleteFailed": "Couldn't delete the zone. Please try again."
+    }
   },
   "launcher": {
     "hello": "Hi, {name}",
@@ -320,7 +343,8 @@
     "footer": "Your data is stored in Supabase and syncs across your devices.",
     "notices": {
       "confirmed": "Email confirmed. You can sign in now.",
-      "confirmError": "The confirmation link has expired or is invalid. Sign in and we'll send a new one."
+      "confirmError": "The confirmation link has expired or is invalid. Sign in and we'll send a new one.",
+      "resetError": "The password reset link has expired, was already used, or was opened in a different browser. Request a new one via “Forgot your password?”."
     },
     "validation": {
       "emailRequired": "Enter your email address.",
@@ -340,7 +364,14 @@
       "rateLimit": "Too many attempts. Try again in a few minutes.",
       "network": "Can't reach the server. Check your connection and try again.",
       "generic": "Something went wrong. Please try again."
-    }
+    },
+    "forgotLink": "Forgot your password?",
+    "forgotIntro": "Enter your account email — we'll send a link to set a new password.",
+    "sendResetLink": "Send link",
+    "sending": "Sending…",
+    "rememberedQuestion": "Remembered your password?",
+    "forgotSentBody": "If an account with <b>{email}</b> exists, we've sent it a link to set a new password.",
+    "forgotSentHint": "Open the link in the same browser you requested it from. Can't see it? Check your spam folder."
   },
   "yearSummary": {
     "prev": "Previous year",
@@ -428,6 +459,42 @@
       "weak": "The password is too weak. Use a longer one.",
       "rateLimit": "Too many attempts. Try again in a few minutes.",
       "generic": "Couldn't save. Please try again."
+    }
+  },
+  "validation": {
+    "amountRequired": "Enter an amount.",
+    "amountFormat": "Enter the amount as a number, e.g. 120 or 120.50 (max. 2 decimal places).",
+    "amountPositive": "The amount must be greater than 0.",
+    "hoursRange": "Enter hours between 0 and 744.",
+    "dateRequired": "Choose a date.",
+    "monthRequired": "Choose a month.",
+    "endBeforeStart": "The last month can't be before the first one.",
+    "descTooLong": "The description can be at most 200 characters.",
+    "initialInvalid": "Enter an amount of 0 or more, e.g. 5000 or 5000.50.",
+    "budgetInvalid": "Enter a limit greater than 0, or leave it empty.",
+    "categoryRequired": "Choose a category."
+  },
+  "resetPassword": {
+    "title": "New password",
+    "intro": "Set a new password for <b>{email}</b>.",
+    "password": "New password",
+    "confirm": "Confirm new password",
+    "hint": "At least {min} characters.",
+    "submit": "Set new password",
+    "saving": "Saving…",
+    "done": "Your password has been changed. You're signed in.",
+    "goToApp": "Go to the app",
+    "validation": {
+      "required": "Enter a new password.",
+      "tooShort": "The password must be at least {min} characters.",
+      "confirmRequired": "Confirm the new password.",
+      "mismatch": "Passwords don't match."
+    },
+    "errors": {
+      "same": "The new password must differ from the previous one.",
+      "weak": "The password is too weak. Use a longer one.",
+      "expired": "The reset session has expired. Request a new link.",
+      "generic": "Couldn't change the password. Please try again."
     }
   }
 }
