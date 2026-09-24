@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { useEncryption } from "./EncryptionContext";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { wrapWithPassword } from "@/lib/crypto";
 
 type Mode = "password" | "recovery" | "newPassword";
@@ -81,9 +82,8 @@ export function EncryptionUnlock() {
         <form onSubmit={handleUnlock} className="flex flex-col gap-3">
           <label className="flex flex-col gap-1.5 text-xs font-semibold text-ink-muted" htmlFor="encPassword">
             <span>{t("password")}</span>
-            <input
+            <PasswordInput
               id="encPassword"
-              type="password"
               required
               autoComplete="current-password"
               autoFocus
@@ -153,9 +153,8 @@ export function EncryptionUnlock() {
         <form onSubmit={handleSetNewPassword} className="flex flex-col gap-3">
           <label className="flex flex-col gap-1.5 text-xs font-semibold text-ink-muted" htmlFor="encNewPassword">
             <span>{t("newPassword")}</span>
-            <input
+            <PasswordInput
               id="encNewPassword"
-              type="password"
               required
               autoFocus
               autoComplete="new-password"
@@ -166,9 +165,8 @@ export function EncryptionUnlock() {
           </label>
           <label className="flex flex-col gap-1.5 text-xs font-semibold text-ink-muted" htmlFor="encNewPasswordConfirm">
             <span>{t("confirmPassword")}</span>
-            <input
+            <PasswordInput
               id="encNewPasswordConfirm"
-              type="password"
               required
               autoComplete="new-password"
               value={newPasswordConfirm}

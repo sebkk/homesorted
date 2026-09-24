@@ -39,11 +39,19 @@ export async function createZone(name: string, currency = "PLN") {
   return { data, error: error?.message ?? null };
 }
 
-export async function renameZone(zoneId: string, name: string) {
+/** Saves a zone's name and its month definition (see MonthPeriod in finance.ts). */
+export async function updateZone(zoneId: string, fields: { name: string; monthStartDay: number; monthLabel: string }) {
+  const { name, monthStartDay, monthLabel } = fields;
   if (!validZoneName(name)) return { error: "invalid name" };
+  if (!Number.isInteger(monthStartDay) || monthStartDay < 1 || monthStartDay > 28) return { error: "invalid start day" };
+  if (monthLabel !== "start" && monthLabel !== "end") return { error: "invalid label" };
   const supabase = await createClient();
   // RLS limits this to the caller's own zones; zero rows means not theirs.
-  const { data, error } = await supabase.from("zones").update({ name: name.trim() }).eq("id", zoneId).select("id");
+  const { data, error } = await supabase
+    .from("zones")
+    .update({ name: name.trim(), month_start_day: monthStartDay, month_label: monthLabel })
+    .eq("id", zoneId)
+    .select("id");
   if (!error && !data?.length) return { error: "not found" };
   revalidatePath("/launcher");
   revalidatePath("/zones");

@@ -1,4 +1,4 @@
-import { allMonthsSorted, baseAmount, expensesForMonth, grossAmount, grossBase, incomesForMonth } from "./finance";
+import { allMonthsSorted, baseAmount, expensesForMonth, grossAmount, grossBase, incomesForMonth, type MonthPeriod } from "./finance";
 import { Expense, Income, IncomeType, RecurringExpense, RecurringIncome, SavingsEntry } from "./types";
 
 /** Translator for the "csv" messages namespace. */
@@ -28,6 +28,7 @@ export function buildTransactionsCsv({
   categoryName,
   incomeTypeLabel,
   zoneCurrency,
+  period,
   t,
 }: {
   incomes: Income[];
@@ -39,9 +40,10 @@ export function buildTransactionsCsv({
   categoryName: (categoryId: string) => string;
   incomeTypeLabel: (type: IncomeType) => string;
   zoneCurrency: string;
+  period: MonthPeriod;
   t: CsvT;
 }): string {
-  const months = allMonthsSorted(incomes, expenses, [...recurring, ...recurringIncomes], currentMonth);
+  const months = allMonthsSorted(incomes, expenses, [...recurring, ...recurringIncomes], currentMonth, period);
   type Row = { date: string; type: string; category: string; desc: string; amount: number; gross?: number; original: number; currency: string; rate: number };
   const rows: Row[] = [
     ...months.flatMap((m) =>
@@ -58,7 +60,7 @@ export function buildTransactionsCsv({
       }))
     ),
     ...months.flatMap((m) =>
-      expensesForMonth(expenses, recurring, m).map((x) => ({
+      expensesForMonth(expenses, recurring, m, period).map((x) => ({
         date: x.date,
         type: "recurring" in x ? t("recurringExpense") : t("expense"),
         category: categoryName(x.category_id),

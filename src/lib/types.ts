@@ -10,6 +10,8 @@ export interface Zone {
   pinned: boolean;
   color: number; // 1-8, indexes into the cat1..cat8 palette
   currency: string; // default currency: every sum in the zone is shown in it
+  month_start_day: number; // 1-28; 1 = calendar months (see MonthPeriod)
+  month_label: "start" | "end";
   created_at: string;
 }
 

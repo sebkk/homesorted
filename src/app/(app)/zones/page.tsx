@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { useForm } from "react-hook-form";
-import { useIntlLocale } from "@/i18n/useFormat";
+import { useForm, useWatch } from "react-hook-form";
+import { useIntlLocale, useMonthFormat, usePeriodRange } from "@/i18n/useFormat";
 import { CURRENCIES, currencyName } from "@/lib/currencies";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { createZone, deleteZone, renameZone, togglePinZone } from "@/lib/actions";
+import { createZone, deleteZone, togglePinZone, updateZone } from "@/lib/actions";
+import { currentMonthStr, currentPeriod, nextMonth, type MonthPeriod } from "@/lib/finance";
 import { MAX_ZONE_NAME, Zone } from "@/lib/types";
 import { Sheet, SheetHeader, Field, fieldAria } from "@/components/ui/Sheet";
 import { Banner } from "@/components/ui/FormField";
@@ -141,7 +142,7 @@ export default function ZonesPage() {
             key={sheet.zone.id}
             zone={sheet.zone}
             onClose={() => setSheet(null)}
-            onRenamed={(name) => setZones((prev) => prev.map((z) => (z.id === sheet.zone.id ? { ...z, name } : z)))}
+            onSaved={(patch) => setZones((prev) => prev.map((z) => (z.id === sheet.zone.id ? { ...z, ...patch } : z)))}
             onDeleted={() => setZones((prev) => prev.filter((z) => z.id !== sheet.zone.id))}
           />
         )}
@@ -204,37 +205,54 @@ function CreateZoneForm({ onClose }: { onClose: () => void }) {
   );
 }
 
+interface EditZoneValues {
+  name: string;
+  monthStartDay: string;
+  monthLabel: "start" | "end";
+}
+
 function EditZoneForm({
   zone,
   onClose,
-  onRenamed,
+  onSaved,
   onDeleted,
 }: {
   zone: Zone;
   onClose: () => void;
-  onRenamed: (name: string) => void;
+  onSaved: (patch: Pick<Zone, "name" | "month_start_day" | "month_label">) => void;
   onDeleted: () => void;
 }) {
   const t = useTranslations("zones");
   const { showToast } = useToast();
   const nameRules = useNameRules();
+  const { month: monthName } = useMonthFormat();
+  const rangeOf = usePeriodRange();
   const [serverError, setServerError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const { register, handleSubmit, formState } = useForm<{ name: string }>({ mode: "onTouched", defaultValues: { name: zone.name } });
+  const { register, handleSubmit, control, formState } = useForm<EditZoneValues>({
+    mode: "onTouched",
+    defaultValues: { name: zone.name, monthStartDay: String(zone.month_start_day ?? 1), monthLabel: zone.month_label ?? "start" },
+  });
   const error = formState.errors.name;
+  const [startDay, label] = useWatch({ control, name: ["monthStartDay", "monthLabel"] });
+  const preview: MonthPeriod = { startDay: Number(startDay) || 1, label };
+  const previewKey = currentPeriod(preview);
+  // A sample period starting this calendar month, to show how each naming option reads.
+  const sampleFirst = currentMonthStr();
+  const sampleRange = rangeOf(sampleFirst, { startDay: preview.startDay, label: "start" }) ?? "";
 
-  async function onSubmit(v: { name: string }) {
+  async function onSubmit(v: EditZoneValues) {
     setServerError(null);
-    const name = v.name.trim();
-    const { error } = await renameZone(zone.id, name);
+    const patch = { name: v.name.trim(), month_start_day: Number(v.monthStartDay) || 1, month_label: v.monthLabel };
+    const { error } = await updateZone(zone.id, { name: patch.name, monthStartDay: patch.month_start_day, monthLabel: patch.month_label });
     if (error) {
       setServerError(t("errors.saveFailed"));
       return;
     }
-    onRenamed(name);
+    onSaved(patch);
     onClose();
-    showToast(t("renamed", { name }));
+    showToast(t("saved", { name: patch.name }));
   }
 
   async function handleDelete() {
@@ -259,8 +277,40 @@ function EditZoneForm({
           <input id="editZoneName" type="text" {...fieldAria("editZoneName", error)} {...register("name", nameRules)} className={inputClass} />
         </Field>
         <div className="text-[11.5px] text-ink-faint -mt-1">{t("currencyLocked", { currency: zone.currency })}</div>
+
+        <Field label={t("period.startDay")} htmlFor="zoneStartDay" hint={t("period.startDayHint")}>
+          <select id="zoneStartDay" {...register("monthStartDay")} className={inputClass}>
+            {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+              <option key={d} value={d}>
+                {d === 1 ? t("period.day1") : t("period.dayN", { day: d })}
+              </option>
+            ))}
+          </select>
+        </Field>
+        {preview.startDay > 1 && (
+          <fieldset className="flex flex-col gap-2">
+            <legend className="text-xs font-semibold text-ink-muted mb-1.5">{t("period.label")}</legend>
+            {(["start", "end"] as const).map((l) => (
+              <label key={l} className="flex items-start gap-2.5 text-[13px]" htmlFor={`zoneLabel-${l}`}>
+                <input id={`zoneLabel-${l}`} type="radio" value={l} {...register("monthLabel")} className="mt-0.5 accent-accent" />
+                <span>
+                  {t(l === "start" ? "period.labelStart" : "period.labelEnd", {
+                    range: sampleRange,
+                    month: monthName(l === "start" ? sampleFirst : nextMonth(sampleFirst)),
+                  })}
+                </span>
+              </label>
+            ))}
+          </fieldset>
+        )}
+        <div className="text-[12px] text-ink-muted bg-surface-2 border border-border rounded-md px-3 py-2.5">
+          {preview.startDay > 1
+            ? t("period.preview", { month: monthName(previewKey), range: rangeOf(previewKey, preview) ?? "" })
+            : t("period.previewCalendar")}
+        </div>
+
         <button type="submit" disabled={formState.isSubmitting || !formState.isDirty} className={primaryButton}>
-          {formState.isSubmitting ? t("saving") : t("saveName")}
+          {formState.isSubmitting ? t("saving") : t("save")}
         </button>
       </form>
 

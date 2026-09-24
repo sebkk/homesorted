@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { useIncomeTypeLabel, useMonthFormat } from "@/i18n/useFormat";
+import { useIncomeTypeLabel, useMonthFormat, usePeriodRange } from "@/i18n/useFormat";
 import { useMoney } from "@/components/finance/MoneyContext";
 import { useZoneData } from "@/lib/useZoneData";
 import { useCategories } from "@/lib/useCategories";
@@ -52,30 +52,32 @@ export function MonthStats({
   const { fmt, symbol } = useMoney();
   const { incomes, expenses, recurring, recurringIncomes, savingsEntries } = zd;
   const categories = useCategories();
+  const { period } = zd;
+  const range = usePeriodRange();
   const [month, setMonth] = useState(initialMonth);
 
-  const months = allMonthsSorted(incomes, expenses, [...recurring, ...recurringIncomes], currentMonth);
+  const months = allMonthsSorted(incomes, expenses, [...recurring, ...recurringIncomes], currentMonth, period);
   const idx = months.indexOf(month);
   const prev = idx > 0 ? months[idx - 1] : null;
   const next = idx >= 0 && idx < months.length - 1 ? months[idx + 1] : null;
 
   const earned = monthIncomeTotal(incomes, recurringIncomes, month);
-  const spent = monthExpenseTotal(expenses, recurring, month);
-  const saved = savingsForMonth(savingsEntries, month);
-  const { vat, vatSource, balance } = monthBalance(incomes, recurringIncomes, expenses, recurring, month, categories.roleOf);
-  const rates = monthHourlyRates(incomes, recurringIncomes, expenses, recurring, month, categories.roleOf);
+  const spent = monthExpenseTotal(expenses, recurring, month, period);
+  const saved = savingsForMonth(savingsEntries, month, period);
+  const { vat, vatSource, balance } = monthBalance(incomes, recurringIncomes, expenses, recurring, month, categories.roleOf, period);
+  const rates = monthHourlyRates(incomes, recurringIncomes, expenses, recurring, month, categories.roleOf, period);
 
   // Colors follow the category, not its rank this month: the five biggest
   // categories across all months keep the same color while you page through
   // months; everything else is "Pozostałe" in neutral gray.
-  const allTimeByCategory = sumBy(months.flatMap((m) => expensesForMonth(expenses, recurring, m)), (x) => x.category_id, (x) => baseAmount(x));
+  const allTimeByCategory = sumBy(months.flatMap((m) => expensesForMonth(expenses, recurring, m, period)), (x) => x.category_id, (x) => baseAmount(x));
   const colored = [...allTimeByCategory.entries()].sort((a, b) => b[1] - a[1]).slice(0, SLOT_COLORS.length).map(([c]) => c);
   const colorOf = (categoryId: string) => {
     const i = colored.indexOf(categoryId);
     return i >= 0 ? SLOT_COLORS[i] : OTHER_COLOR;
   };
 
-  const monthByCategory = sumBy(expensesForMonth(expenses, recurring, month), (x) => x.category_id, (x) => baseAmount(x));
+  const monthByCategory = sumBy(expensesForMonth(expenses, recurring, month, period), (x) => x.category_id, (x) => baseAmount(x));
   const byCategory = [...monthByCategory.entries()].map(([id, amount]) => ({ id, amount })).sort((a, b) => b.amount - a.amount);
   const otherSum = byCategory.filter((c) => !colored.includes(c.id)).reduce((s, c) => s + c.amount, 0);
   const expenseSegments: DonutSegment[] = [
@@ -98,7 +100,10 @@ export function MonthStats({
       <SheetHeader title={t("title")} onClose={onClose} />
       <div className="flex items-center justify-between -mt-1">
         <MonthNavButton label={t("prevMonth")} disabled={!prev} onClick={() => prev && setMonth(prev)} direction="prev" />
-        <div className="text-[15px] font-bold">{monthName(month)}</div>
+        <div className="text-center">
+          <div className="text-[15px] font-bold">{monthName(month)}</div>
+          {range(month, period) && <div className="text-[11.5px] text-ink-faint">{range(month, period)}</div>}
+        </div>
         <MonthNavButton label={t("nextMonth")} disabled={!next} onClick={() => next && setMonth(next)} direction="next" />
       </div>
 

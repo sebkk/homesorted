@@ -13,6 +13,11 @@ create table if not exists public.zones (
   color smallint not null default 1 check (color between 1 and 8),
   -- default currency: every sum in the zone is shown in it (chosen at creation)
   currency text not null default 'PLN' check (currency ~ '^[A-Z]{3}$'),
+  -- the zone's "month": the day it starts on (1 = calendar month; capped at 28
+  -- so every month has it) and whether a period spanning two calendar months
+  -- is named after the month it starts in or ends in (src/lib/finance.ts periodOf)
+  month_start_day smallint not null default 1 check (month_start_day between 1 and 28),
+  month_label text not null default 'start' check (month_label in ('start', 'end')),
   created_at timestamptz not null default now()
 );
 

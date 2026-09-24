@@ -110,6 +110,56 @@ export function currentMonthStr(d = new Date()): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
 }
 
+// ---------- zone month periods ----------
+// A zone's "month" can start on any day 1-28 (e.g. payday). Months are still
+// identified by a "YYYY-MM" key; a period spanning two calendar months is
+// named after the month it starts in ("start") or ends in ("end").
+// startDay 1 is always the plain calendar month, whatever the label.
+export interface MonthPeriod {
+  startDay: number;
+  label: "start" | "end";
+}
+
+export const CALENDAR_MONTH: MonthPeriod = { startDay: 1, label: "start" };
+
+const isCalendar = (p: MonthPeriod) => p.startDay <= 1;
+
+/** The calendar month in which period `key` begins. */
+function periodFirstMonth(key: string, p: MonthPeriod): string {
+  return isCalendar(p) || p.label === "start" ? key : prevMonth(key);
+}
+
+/** Which period ("YYYY-MM" key) a "YYYY-MM-DD" date belongs to. */
+export function periodOf(date: string, p: MonthPeriod = CALENDAR_MONTH): string {
+  const key = date.slice(0, 7);
+  if (isCalendar(p)) return key;
+  const day = parseInt(date.slice(8, 10), 10);
+  if (p.label === "start") return day >= p.startDay ? key : prevMonth(key);
+  return day >= p.startDay ? nextMonth(key) : key;
+}
+
+/** First and last day ("YYYY-MM-DD") of period `key`. */
+export function periodRange(key: string, p: MonthPeriod = CALENDAR_MONTH): { start: string; end: string } {
+  if (isCalendar(p)) return { start: `${key}-01`, end: lastDayOfMonth(key) };
+  const first = periodFirstMonth(key, p);
+  return { start: `${first}-${pad2(p.startDay)}`, end: `${nextMonth(first)}-${pad2(p.startDay - 1)}` };
+}
+
+/** The date within period `key` on which something due on `dayOfMonth`
+ * falls: days from startDay on are in the period's first calendar month, the
+ * rest in the next one. Past a short month's end it clamps to the last day
+ * (a day-31 payment still happens in February). */
+export function periodDay(dayOfMonth: number, key: string, p: MonthPeriod = CALENDAR_MONTH): string {
+  const first = periodFirstMonth(key, p);
+  const month = isCalendar(p) || dayOfMonth >= p.startDay ? first : nextMonth(first);
+  return `${month}-${pad2(Math.min(dayOfMonth, daysInMonth(month)))}`;
+}
+
+/** The period today falls in — the zone's "current month". */
+export function currentPeriod(p: MonthPeriod = CALENDAR_MONTH): string {
+  return periodOf(todayStr(), p);
+}
+
 export function lastDayOfMonth(monthKey: string): string {
   return `${monthKey}-${pad2(daysInMonth(monthKey))}`;
 }
@@ -126,13 +176,12 @@ export function isActiveInMonth(t: Pick<RecurringTemplate, "start_month" | "end_
   return t.start_month <= monthKey && (!t.end_month || monthKey < t.end_month) && !t.skip_months.includes(monthKey);
 }
 
-export function recurringForMonth(recurring: RecurringExpense[], monthKey: string): RecurringOccurrence[] {
+export function recurringForMonth(recurring: RecurringExpense[], monthKey: string, p: MonthPeriod = CALENDAR_MONTH): RecurringOccurrence[] {
   return recurring
     .filter((r) => isActiveInMonth(r, monthKey))
     .map((r) => ({
       id: `rec_${r.id}_${monthKey}`,
-      // Clamp to the month's last day — e.g. a day-31 template still fires in February.
-      date: `${monthKey}-${pad2(Math.min(r.day_of_month, daysInMonth(monthKey)))}`,
+      date: periodDay(r.day_of_month, monthKey, p),
       category_id: r.category_id,
       desc: r.desc,
       amount: r.amount,
@@ -167,20 +216,22 @@ export function recurringIncomesForMonth(recurring: RecurringIncome[], monthKey:
 export function expensesForMonth(
   expenses: Expense[],
   recurring: RecurringExpense[],
-  monthKey: string
+  monthKey: string,
+  p: MonthPeriod = CALENDAR_MONTH
 ): AnyExpense[] {
   return [
-    ...expenses.filter((x) => x.date.slice(0, 7) === monthKey),
-    ...recurringForMonth(recurring, monthKey),
+    ...expenses.filter((x) => periodOf(x.date, p) === monthKey),
+    ...recurringForMonth(recurring, monthKey, p),
   ];
 }
 
 export function monthExpenseTotal(
   expenses: Expense[],
   recurring: RecurringExpense[],
-  monthKey: string
+  monthKey: string,
+  p: MonthPeriod = CALENDAR_MONTH
 ): number {
-  return expensesForMonth(expenses, recurring, monthKey).reduce((s, x) => s + baseAmount(x), 0);
+  return expensesForMonth(expenses, recurring, monthKey, p).reduce((s, x) => s + baseAmount(x), 0);
 }
 
 export function incomesForMonth(incomes: Income[], recurring: RecurringIncome[], monthKey: string): AnyIncome[] {
@@ -199,8 +250,15 @@ export function monthIncomeNet(incomes: Income[], recurring: RecurringIncome[], 
 /** Resolves a category id to its role (ZUS / income tax / VAT) — see useCategories. */
 export type RoleOf = (categoryId: string) => CategoryRole | null;
 
-function roleSum(expenses: Expense[], recurring: RecurringExpense[], monthKey: string, roleOf: RoleOf, role: CategoryRole): number {
-  return expensesForMonth(expenses, recurring, monthKey)
+function roleSum(
+  expenses: Expense[],
+  recurring: RecurringExpense[],
+  monthKey: string,
+  roleOf: RoleOf,
+  role: CategoryRole,
+  p: MonthPeriod = CALENDAR_MONTH
+): number {
+  return expensesForMonth(expenses, recurring, monthKey, p)
     .filter((x) => roleOf(x.category_id) === role)
     .reduce((s, x) => s + baseAmount(x), 0);
 }
@@ -218,12 +276,13 @@ export function monthVat(
   expenses: Expense[],
   recurring: RecurringExpense[],
   monthKey: string,
-  roleOf: RoleOf
+  roleOf: RoleOf,
+  p: MonthPeriod = CALENDAR_MONTH
 ): { vat: number; source: VatSource; factor: number } {
   const invoiceVat = monthIncomeTotal(incomes, recurringIncomes, monthKey) - monthIncomeNet(incomes, recurringIncomes, monthKey);
-  const hasPaid = expensesForMonth(expenses, recurring, monthKey).some((x) => roleOf(x.category_id) === "vat");
+  const hasPaid = expensesForMonth(expenses, recurring, monthKey, p).some((x) => roleOf(x.category_id) === "vat");
   if (!hasPaid) return { vat: invoiceVat, source: "invoice", factor: 1 };
-  const paid = roleSum(expenses, recurring, monthKey, roleOf, "vat");
+  const paid = roleSum(expenses, recurring, monthKey, roleOf, "vat", p);
   return { vat: paid, source: "paid", factor: invoiceVat > 0 ? paid / invoiceVat : 0 };
 }
 
@@ -245,11 +304,12 @@ export function monthBalance(
   expenses: Expense[],
   recurring: RecurringExpense[],
   monthKey: string,
-  roleOf: RoleOf
+  roleOf: RoleOf,
+  p: MonthPeriod = CALENDAR_MONTH
 ) {
   const gross = monthIncomeTotal(incomes, recurringIncomes, monthKey);
-  const { vat, source } = monthVat(incomes, recurringIncomes, expenses, recurring, monthKey, roleOf);
-  const spent = monthExpenseTotal(expenses, recurring, monthKey) - roleSum(expenses, recurring, monthKey, roleOf, "vat");
+  const { vat, source } = monthVat(incomes, recurringIncomes, expenses, recurring, monthKey, roleOf, p);
+  const spent = monthExpenseTotal(expenses, recurring, monthKey, p) - roleSum(expenses, recurring, monthKey, roleOf, "vat", p);
   return { gross, vat, vatSource: source, spent, balance: gross - vat - spent };
 }
 
@@ -266,14 +326,15 @@ export function monthHourlyRates(
   expenses: Expense[],
   recurring: RecurringExpense[],
   monthKey: string,
-  roleOf: RoleOf
+  roleOf: RoleOf,
+  p: MonthPeriod = CALENDAR_MONTH
 ) {
   const work = incomesForMonth(incomes, recurringIncomes, monthKey).filter((x) => x.type !== "inne" && x.hours > 0);
   const hours = work.reduce((s, x) => s + x.hours, 0);
-  const { factor } = monthVat(incomes, recurringIncomes, expenses, recurring, monthKey, roleOf);
+  const { factor } = monthVat(incomes, recurringIncomes, expenses, recurring, monthKey, roleOf, p);
   const net = work.reduce((s, x) => s + netAfterVat(x, factor) * (Number(x.fx_rate) || 1), 0);
-  const zus = roleSum(expenses, recurring, monthKey, roleOf, "zus");
-  const tax = roleSum(expenses, recurring, monthKey, roleOf, "income_tax");
+  const zus = roleSum(expenses, recurring, monthKey, roleOf, "zus", p);
+  const tax = roleSum(expenses, recurring, monthKey, roleOf, "income_tax", p);
   return {
     hours,
     zus,
@@ -289,11 +350,12 @@ export function allMonthsSorted(
   incomes: Income[],
   expenses: Expense[],
   templates: Pick<RecurringTemplate, "start_month">[],
-  currentMonth: string
+  currentMonth: string,
+  p: MonthPeriod = CALENDAR_MONTH
 ): string[] {
   const set = new Set<string>();
   incomes.forEach((x) => set.add(x.month));
-  expenses.forEach((x) => set.add(x.date.slice(0, 7)));
+  expenses.forEach((x) => set.add(periodOf(x.date, p)));
   templates.forEach((r) => {
     let m = r.start_month;
     let guard = 0;
@@ -310,8 +372,8 @@ export function savingsBalance(initial: number, entries: SavingsEntry[]): number
   return initial + entries.reduce((sum, e) => sum + baseAmount(e), 0);
 }
 
-export function savingsForMonth(entries: SavingsEntry[], monthKey: string): number {
+export function savingsForMonth(entries: SavingsEntry[], monthKey: string, p: MonthPeriod = CALENDAR_MONTH): number {
   return entries
-    .filter((e) => e.date.slice(0, 7) === monthKey)
+    .filter((e) => periodOf(e.date, p) === monthKey)
     .reduce((sum, e) => sum + baseAmount(e), 0);
 }

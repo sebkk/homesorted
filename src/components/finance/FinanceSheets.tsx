@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { FormProvider, useForm, useFormContext, useWatch } from "react-hook-form";
-import { useIncomeTypeLabel, useMonthFormat } from "@/i18n/useFormat";
+import { useIncomeTypeLabel, useInputNumber, useMonthFormat } from "@/i18n/useFormat";
 import { useMoney } from "@/components/finance/MoneyContext";
 import { useZoneData } from "@/lib/useZoneData";
 import { useCategories } from "@/lib/useCategories";
@@ -304,6 +304,7 @@ function IncomeForm({
   const { month: monthName } = useMonthFormat();
   const { fmt } = useMoney();
   const { busy, save } = useSaver(onClose);
+  const num = useInputNumber();
   const source = editing ?? editingRecurring;
   const isEdit = !!source;
   const form = useForm<IncomeValues>({
@@ -313,9 +314,9 @@ function IncomeForm({
       isRecurring: !!editingRecurring,
       month: editing?.month ?? currentMonth,
       invoiceDate: editing?.invoice_date ?? lastDayOfMonth(editing?.month ?? currentMonth),
-      hours: source ? String(source.hours) : "",
+      hours: source ? num(source.hours) : "",
       desc: source?.desc ?? "",
-      amount: source ? String(source.amount) : "",
+      amount: source ? num(source.amount) : "",
       icon: source?.icon ?? "",
       applyVat: (source?.vat_rate ?? 0) > 0,
       ...rangeDefaults(editingRecurring?.start_month ?? currentMonth, editingRecurring?.end_month ?? null),
@@ -493,13 +494,14 @@ function ExpenseForm({
   const tv = useTranslations("validation");
   const { busy, save } = useSaver(onClose);
   const categories = useCategories();
+  const num = useInputNumber();
   const source = editingExpense ?? editingRecurring;
   const form = useForm<ExpenseValues>({
     mode: "onTouched",
     defaultValues: {
       categoryId: source?.category_id ?? "",
       desc: source?.desc ?? "",
-      amount: source ? String(source.amount) : "",
+      amount: source ? num(source.amount) : "",
       icon: source?.icon ?? "",
       isRecurring: !!editingRecurring,
       dayOfMonth: editingRecurring ? String(editingRecurring.day_of_month) : "1",
@@ -617,12 +619,13 @@ function SavingsForm({
   const tc = useTranslations("common");
   const tv = useTranslations("validation");
   const { busy, save } = useSaver(onClose);
+  const num = useInputNumber();
   const form = useForm<SavingsValues>({
     mode: "onTouched",
     defaultValues: {
       date: editing?.date ?? todayStr(),
       desc: editing?.desc ?? "",
-      amount: editing ? String(Math.abs(editing.amount)) : "",
+      amount: editing ? num(Math.abs(editing.amount)) : "",
       withdraw: editing ? editing.amount < 0 : false,
     },
   });
@@ -666,9 +669,10 @@ function EditInitialForm({ zd, onClose }: { zd: ReturnType<typeof useZoneData>; 
   const tc = useTranslations("common");
   const tv = useTranslations("validation");
   const { busy, save } = useSaver(onClose);
+  const num = useInputNumber();
   const { register, handleSubmit, formState } = useForm<{ initial: string }>({
     mode: "onTouched",
-    defaultValues: { initial: String(zd.savingsInitial || 0) },
+    defaultValues: { initial: num(zd.savingsInitial || 0) },
   });
   const error = formState.errors.initial;
 
@@ -700,10 +704,11 @@ function BudgetsForm({ zd, onClose }: { zd: ReturnType<typeof useZoneData>; onCl
   const tv = useTranslations("validation");
   const { busy, save } = useSaver(onClose);
   const categories = useCategories();
+  const num = useInputNumber();
   // Keyed by category id; "" means "don't track this category".
   const { register, handleSubmit, formState } = useForm<{ limits: Record<string, string> }>({
     mode: "onTouched",
-    defaultValues: { limits: Object.fromEntries(zd.budgets.map((b) => [b.category_id, String(b.amount)])) },
+    defaultValues: { limits: Object.fromEntries(zd.budgets.map((b) => [b.category_id, num(b.amount)])) },
   });
 
   async function onSubmit(v: { limits: Record<string, string> }) {

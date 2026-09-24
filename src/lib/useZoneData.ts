@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { CategoryBudget, Expense, Income, RecurringExpense, RecurringIncome, RecurringTemplate, SavingsEntry } from "@/lib/types";
-import { daysInMonth, isActiveInMonth, lastDayOfMonth, nextMonth, pad2 } from "@/lib/finance";
+import { CALENDAR_MONTH, isActiveInMonth, lastDayOfMonth, nextMonth, periodDay, type MonthPeriod } from "@/lib/finance";
 import { decryptNumber, decryptText, encryptNumber, encryptText, isEncrypted } from "@/lib/crypto";
 
 /** Months a template has occurrences in, up to `currentMonth`. */
@@ -15,7 +15,6 @@ function occurrenceMonths(t: RecurringTemplate, currentMonth: string): string[] 
   return months;
 }
 
-const expenseDate = (r: RecurringExpense, m: string) => `${m}-${pad2(Math.min(r.day_of_month, daysInMonth(m)))}`;
 const incomeDate = (_: RecurringIncome, m: string) => lastDayOfMonth(m);
 
 // ---------- encryption codec ----------
@@ -103,8 +102,17 @@ async function encodeAmountHoursDesc(dek: CryptoKey | null, fields: Record<strin
 // always holds plain, decrypted values; only the wire payloads sent to/read
 // from Supabase pass through the codec above.
 
-export function useZoneData(zoneId: string | null, zoneCurrency = "PLN", currentMonth = "", dek: CryptoKey | null = null) {
+export function useZoneData(
+  zoneId: string | null,
+  zoneCurrency = "PLN",
+  currentMonth = "",
+  dek: CryptoKey | null = null,
+  period: MonthPeriod = CALENDAR_MONTH
+) {
   const supabase = createClient();
+  // Date of a recurring expense's occurrence in a month — same rule as
+  // recurringForMonth, so its NBP rate is fetched for the right day.
+  const expenseDate = (r: RecurringExpense, m: string) => periodDay(r.day_of_month, m, period);
   const [loading, setLoading] = useState(true);
   const [incomes, setIncomes] = useState<Income[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -173,7 +181,7 @@ export function useZoneData(zoneId: string | null, zoneCurrency = "PLN", current
     collect(recurringIncomes, incomeDate);
     return items;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recurring, recurringIncomes, zoneCurrency, currentMonth]);
+  }, [recurring, recurringIncomes, zoneCurrency, currentMonth, period.startDay, period.label]);
 
   const missingFx = [...neededFx.entries()].filter(([k]) => !(k in fxRates));
   const missingKey = missingFx.map(([k]) => k).join("|");
@@ -496,6 +504,8 @@ export function useZoneData(zoneId: string | null, zoneCurrency = "PLN", current
 
   return {
     loading,
+    /** The zone's month definition; pass it to the month helpers in finance.ts. */
+    period,
     budgets,
     saveBudgets,
     incomes,

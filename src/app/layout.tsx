@@ -18,7 +18,8 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 const metadata: Metadata = {
-  title: "HomeSorted",
+  // Pages set just their own name ("Profil"); the tab reads "Profil · HomeSorted".
+  title: { default: "HomeSorted", template: "%s · HomeSorted" },
   manifest: "/manifest.json",
   icons: {
     icon: [

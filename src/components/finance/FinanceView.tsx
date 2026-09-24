@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useZoneData } from "@/lib/useZoneData";
-import { currentMonthStr } from "@/lib/finance";
+import { currentPeriod, type MonthPeriod } from "@/lib/finance";
 import { FinanceTabbar, FinanceTab } from "@/components/finance/FinanceTabbar";
 import { Fab } from "@/components/ui/Fab";
 import { DashboardTab } from "@/components/finance/DashboardTab";
@@ -17,13 +17,25 @@ import { Logo } from "@/components/ui/Logo";
 import { useEncryption } from "@/components/encryption/EncryptionContext";
 import { EncryptionLockButton } from "@/components/encryption/EncryptionLockButton";
 
-export function FinanceView({ zoneId, zoneName, zoneCurrency }: { zoneId: string; zoneName: string; zoneCurrency: string }) {
+export function FinanceView({
+  zoneId,
+  zoneName,
+  zoneCurrency,
+  period,
+}: {
+  zoneId: string;
+  zoneName: string;
+  zoneCurrency: string;
+  period: MonthPeriod;
+}) {
   const t = useTranslations("finance");
   const [tab, setTab] = useState<FinanceTab>("dashboard");
   const [sheet, setSheet] = useState<SheetState>(null);
-  const currentMonth = currentMonthStr();
+  // The zone's current "month" — with a custom start day it may differ from
+  // the calendar month (see MonthPeriod).
+  const currentMonth = currentPeriod(period);
   const { dek } = useEncryption();
-  const zd = useZoneData(zoneId, zoneCurrency, currentMonth, dek);
+  const zd = useZoneData(zoneId, zoneCurrency, currentMonth, dek, period);
 
   return (
     <MoneyProvider currency={zoneCurrency}>

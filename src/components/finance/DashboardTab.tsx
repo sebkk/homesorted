@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useIncomeTypeLabel, useMonthFormat } from "@/i18n/useFormat";
+import { useDateFormat, useIncomeTypeLabel, useMonthFormat, usePeriodRange } from "@/i18n/useFormat";
 import { useZoneData } from "@/lib/useZoneData";
 import { useMoney } from "@/components/finance/MoneyContext";
 import {
@@ -42,28 +42,31 @@ export function DashboardTab({
   const tCsv = useTranslations("csv");
   const typeLabel = useIncomeTypeLabel();
   const { month: monthName } = useMonthFormat();
+  const formatDate = useDateFormat();
   const { fmt, symbol, currency } = useMoney();
   const { incomes, expenses, recurring, recurringIncomes, savingsEntries } = zd;
   const templates = [...recurring, ...recurringIncomes];
   const categories = useCategories();
+  const { period } = zd;
+  const currentRange = usePeriodRange()(currentMonth, period);
   const earned = monthIncomeTotal(incomes, recurringIncomes, currentMonth);
-  const expTotal = monthExpenseTotal(expenses, recurring, currentMonth);
-  const { vat, vatSource, spent: balanceSpent, balance } = monthBalance(incomes, recurringIncomes, expenses, recurring, currentMonth, categories.roleOf);
-  const rates = monthHourlyRates(incomes, recurringIncomes, expenses, recurring, currentMonth, categories.roleOf);
+  const expTotal = monthExpenseTotal(expenses, recurring, currentMonth, period);
+  const { vat, vatSource, spent: balanceSpent, balance } = monthBalance(incomes, recurringIncomes, expenses, recurring, currentMonth, categories.roleOf, period);
+  const rates = monthHourlyRates(incomes, recurringIncomes, expenses, recurring, currentMonth, categories.roleOf, period);
 
-  const months = allMonthsSorted(incomes, expenses, templates, currentMonth).slice(-6);
+  const months = allMonthsSorted(incomes, expenses, templates, currentMonth, period).slice(-6);
   const chartMonths = (months.length ? months : [currentMonth]).map((m) => ({
     month: m,
     income: monthIncomeTotal(incomes, recurringIncomes, m),
-    expense: monthExpenseTotal(expenses, recurring, m),
-    saving: savingsForMonth(savingsEntries, m),
+    expense: monthExpenseTotal(expenses, recurring, m, period),
+    saving: savingsForMonth(savingsEntries, m, period),
   }));
 
-  const activityMonths = allMonthsSorted(incomes, expenses, templates, currentMonth);
-  const allExpenseOccurrences = activityMonths.flatMap((m) => expensesForMonth(expenses, recurring, m));
+  const activityMonths = allMonthsSorted(incomes, expenses, templates, currentMonth, period);
+  const allExpenseOccurrences = activityMonths.flatMap((m) => expensesForMonth(expenses, recurring, m, period));
   const allIncomeOccurrences = activityMonths.flatMap((m) => incomesForMonth(incomes, recurringIncomes, m));
 
-  const monthExpenses = expensesForMonth(expenses, recurring, currentMonth);
+  const monthExpenses = expensesForMonth(expenses, recurring, currentMonth, period);
   const budgetRows = zd.budgets
     .map((b) => ({
       id: b.category_id,
@@ -77,7 +80,8 @@ export function DashboardTab({
   const tx = [
     ...allIncomeOccurrences.map((x) => ({
       kind: "income" as const,
-      date: `${x.month}-28`,
+      date: `${x.month}-28`, // incomes have only a month; this just places them in the sort
+      when: monthName(x.month),
       title: x.desc && (x.type !== "b2b" || "recurring" in x) ? x.desc : typeLabel(x.type),
       amount: grossBase(x),
       icon: resolveIcon(x.icon, INCOME_TYPE_ICONS[x.type]),
@@ -85,6 +89,7 @@ export function DashboardTab({
     ...allExpenseOccurrences.map((x) => ({
       kind: "expense" as const,
       date: x.date,
+      when: formatDate(x.date),
       title: x.desc || categories.name(x.category_id),
       amount: baseAmount(x),
       icon: resolveIcon(x.icon, categories.icon(x.category_id)),
@@ -96,7 +101,10 @@ export function DashboardTab({
   return (
     <div className="pb-2">
       <div className="mt-3.5 p-5 rounded-xl bg-surface-2 border border-border shadow-glass">
-        <div className="text-[12.5px] text-ink-muted font-medium">{t("leftOverIn", { month: monthName(currentMonth) })}</div>
+        <div className="text-[12.5px] text-ink-muted font-medium">
+          {t("leftOverIn", { month: monthName(currentMonth) })}
+          {currentRange && <span className="text-ink-faint font-normal"> · {currentRange}</span>}
+        </div>
         <div
           className="tabular-nums font-bold tracking-tight text-[38px] mt-1 flex items-baseline gap-2"
           style={{ color: balance >= 0 ? "var(--good)" : "var(--critical)" }}
@@ -207,7 +215,7 @@ export function DashboardTab({
               </span>
               <div className="flex-1 min-w-0">
                 <div className="text-[13.5px] font-semibold truncate">{row.title}</div>
-                <div className="text-xs text-ink-muted mt-0.5">{row.date}</div>
+                <div className="text-xs text-ink-muted mt-0.5">{row.when}</div>
               </div>
               <div className={`tabular-nums font-bold text-sm shrink-0 ${row.kind === "income" ? "text-good" : "text-critical"}`}>
                 {row.kind === "income" ? "+" : "−"}
@@ -224,7 +232,7 @@ export function DashboardTab({
           onClick={() =>
             downloadCsv(
               `homesorted-${currentMonth}.csv`,
-              buildTransactionsCsv({ incomes, recurringIncomes, expenses, recurring, savingsEntries, currentMonth, categoryName: categories.name, incomeTypeLabel: typeLabel, zoneCurrency: currency, t: tCsv })
+              buildTransactionsCsv({ incomes, recurringIncomes, expenses, recurring, savingsEntries, currentMonth, categoryName: categories.name, incomeTypeLabel: typeLabel, zoneCurrency: currency, period, t: tCsv })
             )
           }
           className="w-full mt-4 font-semibold text-[13px] text-accent bg-accent-soft border-none rounded-md py-2.5"

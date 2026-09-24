@@ -1,6 +1,11 @@
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { createClient } from "@/lib/supabase/server";
 import { ResetPasswordForm } from "./ResetPasswordForm";
+
+export async function generateMetadata() {
+  return { title: (await getTranslations("titles"))("resetPassword") };
+}
 
 // Reached from /auth/reset with a recovery session. Deliberately outside
 // (app)/: an account with encryption enabled would otherwise hit the

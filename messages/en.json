@@ -17,7 +17,9 @@
     "edit": "Edit",
     "delete": "Delete",
     "recurring": "Recurring",
-    "optional": "(optional)"
+    "optional": "(optional)",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password"
   },
   "incomeTypes": {
     "b2b": "B2B invoice",
@@ -301,6 +303,19 @@
     "errors": {
       "saveFailed": "Couldn't save. Please try again.",
       "deleteFailed": "Couldn't delete the zone. Please try again."
+    },
+    "save": "Save changes",
+    "saved": "Saved zone “{name}”",
+    "period": {
+      "startDay": "Month starts on",
+      "startDayHint": "E.g. your payday. Expenses, recurring items and savings count towards a month by this period.",
+      "day1": "Day 1 (calendar month)",
+      "dayN": "Day {day}",
+      "label": "A period spans two calendar months — which one names it?",
+      "labelStart": "The month it starts in — {range} is {month}",
+      "labelEnd": "The month it ends in — {range} is {month}",
+      "preview": "Now: {month} = {range}",
+      "previewCalendar": "Each month is a plain calendar month, from the 1st to the last day."
     }
   },
   "launcher": {
@@ -417,7 +432,10 @@
     "backToPassword": "Back to password",
     "newPasswordIntro": "Access recovered. Set a new encryption password.",
     "saveNewPassword": "Save new password",
-    "lockNow": "Lock now"
+    "lockNow": "Lock now",
+    "copy": "Copy code",
+    "copied": "Copied",
+    "selectedToCopy": "Selected — copy it manually"
   },
   "profile": {
     "title": "Profile",
@@ -496,5 +514,21 @@
       "expired": "The reset session has expired. Request a new link.",
       "generic": "Couldn't change the password. Please try again."
     }
+  },
+  "titles": {
+    "login": "Sign in",
+    "launcher": "Home",
+    "zones": "Zones",
+    "profile": "Profile",
+    "resetPassword": "New password"
+  },
+  "errorPages": {
+    "notFoundTitle": "Page not found",
+    "notFoundBody": "The link is out of date or the page was removed — for example, a zone that no longer exists.",
+    "errorTitle": "Something went wrong",
+    "errorBody": "This page couldn't be shown. Try again — that often helps if it was a brief connection problem.",
+    "retry": "Try again",
+    "backHome": "Back to home",
+    "errorCode": "Error code: {code}"
   }
 }

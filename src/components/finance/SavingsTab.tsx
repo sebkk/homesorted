@@ -1,6 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { useDateFormat } from "@/i18n/useFormat";
 import { useZoneData } from "@/lib/useZoneData";
 import { useMoney } from "@/components/finance/MoneyContext";
 import { baseAmount, savingsBalance } from "@/lib/finance";
@@ -19,6 +20,7 @@ export function SavingsTab({
 }) {
   const t = useTranslations("savings");
   const tc = useTranslations("common");
+  const formatDate = useDateFormat();
   const { fmt, currency } = useMoney();
   const { showToast } = useToast();
   const balance = savingsBalance(zd.savingsInitial, zd.savingsEntries);
@@ -68,7 +70,7 @@ export function SavingsTab({
                 </span>
                 <div className="flex-1 min-w-0">
                   <div className="text-[13.5px] font-semibold truncate">{e.desc || (good ? t("deposit") : t("withdrawal"))}</div>
-                  <div className="text-xs text-ink-muted mt-0.5">{e.date}</div>
+                  <div className="text-xs text-ink-muted mt-0.5">{formatDate(e.date)}</div>
                 </div>
                 <div className="tabular-nums text-right shrink-0">
                   <div className={`font-bold text-sm ${good ? "text-good" : "text-critical"}`}>

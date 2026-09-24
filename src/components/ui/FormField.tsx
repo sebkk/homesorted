@@ -1,6 +1,7 @@
 "use client";
 
 import type { FieldError, UseFormRegisterReturn } from "react-hook-form";
+import { PasswordInput } from "./PasswordInput";
 
 const inputClass =
   "text-[14.5px] font-medium text-ink bg-surface-2 border rounded-md px-3 py-2.5 outline-none focus:border-accent";
@@ -32,16 +33,28 @@ export function FormField({
       <label htmlFor={id} className="text-xs font-semibold text-ink-muted">
         {label}
       </label>
-      <input
-        id={id}
-        type={type}
-        autoComplete={autoComplete}
-        placeholder={placeholder}
-        aria-invalid={error ? "true" : "false"}
-        aria-describedby={describedBy}
-        className={`${inputClass} ${error ? "border-critical" : "border-border"}`}
-        {...registration}
-      />
+      {type === "password" ? (
+        <PasswordInput
+          id={id}
+          autoComplete={autoComplete}
+          placeholder={placeholder}
+          aria-invalid={error ? "true" : "false"}
+          aria-describedby={describedBy}
+          className={`${inputClass} ${error ? "border-critical" : "border-border"}`}
+          {...registration}
+        />
+      ) : (
+        <input
+          id={id}
+          type={type}
+          autoComplete={autoComplete}
+          placeholder={placeholder}
+          aria-invalid={error ? "true" : "false"}
+          aria-describedby={describedBy}
+          className={`${inputClass} ${error ? "border-critical" : "border-border"}`}
+          {...registration}
+        />
+      )}
       {error ? (
         <span id={`${id}-error`} role="alert" className="text-[11.5px] text-critical leading-snug">
           {error.message}

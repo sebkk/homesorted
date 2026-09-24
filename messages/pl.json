@@ -17,7 +17,9 @@
     "edit": "Edytuj",
     "delete": "Usuń",
     "recurring": "Stałe",
-    "optional": "(opcjonalnie)"
+    "optional": "(opcjonalnie)",
+    "showPassword": "Pokaż hasło",
+    "hidePassword": "Ukryj hasło"
   },
   "incomeTypes": {
     "b2b": "Faktura B2B",
@@ -301,6 +303,19 @@
     "errors": {
       "saveFailed": "Nie udało się zapisać. Spróbuj ponownie.",
       "deleteFailed": "Nie udało się usunąć strefy. Spróbuj ponownie."
+    },
+    "save": "Zapisz zmiany",
+    "saved": "Zapisano strefę „{name}”",
+    "period": {
+      "startDay": "Miesiąc zaczyna się",
+      "startDayHint": "Np. w dniu wypłaty. Wydatki, pozycje stałe i oszczędności liczą się do miesiąca według tego okresu.",
+      "day1": "1. dnia (miesiąc kalendarzowy)",
+      "dayN": "{day}. dnia",
+      "label": "Okres przechodzi przez dwa miesiące — jak go nazywać?",
+      "labelStart": "Od miesiąca, w którym się zaczyna — {range} to {month}",
+      "labelEnd": "Od miesiąca, w którym się kończy — {range} to {month}",
+      "preview": "Teraz: {month} = {range}",
+      "previewCalendar": "Każdy miesiąc to zwykły miesiąc kalendarzowy, od 1. do ostatniego dnia."
     }
   },
   "launcher": {
@@ -417,7 +432,10 @@
     "backToPassword": "Wróć do hasła",
     "newPasswordIntro": "Dostęp odzyskany. Ustaw nowe hasło szyfrujące.",
     "saveNewPassword": "Zapisz nowe hasło",
-    "lockNow": "Zablokuj teraz"
+    "lockNow": "Zablokuj teraz",
+    "copy": "Kopiuj kod",
+    "copied": "Skopiowano",
+    "selectedToCopy": "Zaznaczono — skopiuj ręcznie"
   },
   "profile": {
     "title": "Profil",
@@ -496,5 +514,21 @@
       "expired": "Sesja zmiany hasła wygasła. Poproś o nowy link.",
       "generic": "Nie udało się zmienić hasła. Spróbuj ponownie."
     }
+  },
+  "titles": {
+    "login": "Logowanie",
+    "launcher": "Pulpit",
+    "zones": "Strefy",
+    "profile": "Profil",
+    "resetPassword": "Nowe hasło"
+  },
+  "errorPages": {
+    "notFoundTitle": "Nie ma takiej strony",
+    "notFoundBody": "Link jest nieaktualny albo strona została usunięta — np. strefa, której już nie ma.",
+    "errorTitle": "Coś poszło nie tak",
+    "errorBody": "Nie udało się wyświetlić tej strony. Spróbuj ponownie — często pomaga, jeśli to był chwilowy problem z połączeniem.",
+    "retry": "Spróbuj ponownie",
+    "backHome": "Wróć do pulpitu",
+    "errorCode": "Kod błędu: {code}"
   }
 }

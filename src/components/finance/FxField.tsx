@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useFormContext, useWatch } from "react-hook-form";
+import { useDateFormat } from "@/i18n/useFormat";
 import { CURRENCIES, currencyName } from "@/lib/currencies";
 import { useMoney } from "@/components/finance/MoneyContext";
 import { Field, fieldAria } from "@/components/ui/Sheet";
@@ -132,6 +133,7 @@ export function AmountWithCurrency({
   const t = useTranslations("fx");
   const tv = useTranslations("validation");
   const { fmt, locale } = useMoney();
+  const formatDate = useDateFormat();
   const { register, control, formState } = useFormContext<{ amount: string }>();
   const value = parseFloat(String(useWatch({ control, name: "amount" }) ?? "").replace(",", ".")) || 0;
   const error = formState.errors.amount;
@@ -183,7 +185,7 @@ export function AmountWithCurrency({
             <span className="tabular-nums">
               1 {fx.currency} = {fx.rate.toLocaleString(locale, { maximumFractionDigits: 6 })} {fx.zoneCurrency}
               {fx.meta.table && !isManualTable(fx.meta.table) && (
-                <> · NBP {fx.meta.table}{fx.meta.date ? `, ${fx.meta.date}` : ""}</>
+                <> · NBP {fx.meta.table}{fx.meta.date ? `, ${formatDate(fx.meta.date)}` : ""}</>
               )}
               {isManualTable(fx.meta.table) && <> · {t("manualNote")}</>}
               {value > 0 && <> · ≈ {fmt(value * fx.rate, 2)}</>}

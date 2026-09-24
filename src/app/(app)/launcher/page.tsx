@@ -7,6 +7,10 @@ import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/lib/actions";
 import { Zone } from "@/lib/types";
 
+export async function generateMetadata() {
+  return { title: (await getTranslations("titles"))("launcher") };
+}
+
 const CAT_VARS = [
   "var(--cat1)",
   "var(--cat2)",

@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useMonthFormat } from "@/i18n/useFormat";
+import { useDateFormat, useMonthFormat, usePeriodRange } from "@/i18n/useFormat";
 import { useZoneData } from "@/lib/useZoneData";
 import { useMoney } from "@/components/finance/MoneyContext";
 import { useCategories } from "@/lib/useCategories";
@@ -30,16 +30,19 @@ export function ExpensesTab({
   const t = useTranslations("expenses");
   const tc = useTranslations("common");
   const { monthIn } = useMonthFormat();
+  const formatDate = useDateFormat();
   const { fmt, currency } = useMoney();
   const { showToast } = useToast();
   const { expenses, recurring } = zd;
   const categories = useCategories();
+  const { period } = zd;
+  const rangeOf = usePeriodRange();
 
-  const months = allMonthsSorted([], expenses, recurring, currentMonth)
+  const months = allMonthsSorted([], expenses, recurring, currentMonth, period)
     .reverse()
-    .filter((m) => expensesForMonth(expenses, recurring, m).length > 0);
+    .filter((m) => expensesForMonth(expenses, recurring, m, period).length > 0);
 
-  const monthTotal = (m: string) => expensesForMonth(expenses, recurring, m).reduce((s, x) => s + baseAmount(x), 0);
+  const monthTotal = (m: string) => expensesForMonth(expenses, recurring, m, period).reduce((s, x) => s + baseAmount(x), 0);
   const years = [...new Set(months.map((m) => m.slice(0, 4)))].sort();
   const yearTotals = (year: string) => {
     const inYear = months.filter((m) => m.startsWith(year));
@@ -99,9 +102,9 @@ export function ExpensesTab({
         <div className="text-center py-10 px-5 text-ink-muted text-[13px]">{t("empty")}</div>
       ) : (
         months.map((m) => {
-          const items = expensesForMonth(expenses, recurring, m).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+          const items = expensesForMonth(expenses, recurring, m, period).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
           return (
-            <MonthGroup key={m} month={m} total={monthTotal(m)}>
+            <MonthGroup key={m} month={m} range={rangeOf(m, period)} total={monthTotal(m)}>
               {items.map((x) => {
                 const isRecurring = "recurring" in x;
                 return (
@@ -118,7 +121,7 @@ export function ExpensesTab({
                             <RecurringIcon size={9} /> {tc("recurring")}
                           </Badge>
                         )}
-                        <span>{x.date}</span>
+                        <span>{formatDate(x.date)}</span>
                       </div>
                     </div>
                     <div className="tabular-nums text-right shrink-0">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useIncomeTypeLabel, useMonthFormat } from "@/i18n/useFormat";
+import { useIncomeTypeLabel, useMonthFormat, usePeriodRange } from "@/i18n/useFormat";
 import { useZoneData } from "@/lib/useZoneData";
 import { useMoney } from "@/components/finance/MoneyContext";
 import { allMonthsSorted, grossAmount, grossBase, incomesForMonth, monthIncomeTotal, monthVat, netAfterVat, resolveIcon } from "@/lib/finance";
@@ -35,11 +35,13 @@ export function IncomesTab({
   const { showToast } = useToast();
   const { incomes, recurringIncomes, expenses, recurring } = zd;
   const categories = useCategories();
+  const { period } = zd;
+  const rangeOf = usePeriodRange();
   // "Netto" follows the month's VAT: the VAT actually paid (VAT-category
   // expenses, already reduced by deductions) when recorded, else the invoices'.
-  const vatOf = (m: string) => monthVat(incomes, recurringIncomes, expenses, recurring, m, categories.roleOf);
+  const vatOf = (m: string) => monthVat(incomes, recurringIncomes, expenses, recurring, m, categories.roleOf, period);
 
-  const months = allMonthsSorted(incomes, [], recurringIncomes, currentMonth)
+  const months = allMonthsSorted(incomes, [], recurringIncomes, currentMonth, period)
     .reverse()
     .filter((m) => incomesForMonth(incomes, recurringIncomes, m).length > 0);
 
@@ -109,7 +111,7 @@ export function IncomesTab({
           const items = incomesForMonth(incomes, recurringIncomes, m);
           const { factor } = vatOf(m);
           return (
-            <MonthGroup key={m} month={m} total={items.reduce((s, x) => s + grossBase(x), 0)}>
+            <MonthGroup key={m} month={m} range={rangeOf(m, period)} total={items.reduce((s, x) => s + grossBase(x), 0)}>
               {items.map((e) => {
                 const isRecurring = "recurring" in e;
                 const subParts: string[] = [];
