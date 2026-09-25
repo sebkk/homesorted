@@ -6,22 +6,11 @@ import { EncryptionLockButton } from "@/components/encryption/EncryptionLockButt
 import { InstallBanner } from "@/components/ui/InstallApp";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/lib/actions";
-import { Zone } from "@/lib/types";
+import { Zone, zoneColorVar } from "@/lib/types";
 
 export async function generateMetadata() {
   return { title: (await getTranslations("titles"))("launcher") };
 }
-
-const CAT_VARS = [
-  "var(--cat1)",
-  "var(--cat2)",
-  "var(--cat3)",
-  "var(--cat4)",
-  "var(--cat5)",
-  "var(--cat6)",
-  "var(--cat7)",
-  "var(--cat8)",
-];
 
 export default async function LauncherPage() {
   const t = await getTranslations("launcher");
@@ -83,8 +72,8 @@ export default async function LauncherPage() {
                   <span
                     className="w-[38px] h-[38px] rounded-md flex items-center justify-center shrink-0"
                     style={{
-                      background: `color-mix(in srgb, ${CAT_VARS[(zone.color - 1) % 8]} 16%, transparent)`,
-                      color: CAT_VARS[(zone.color - 1) % 8],
+                      background: `color-mix(in srgb, ${zoneColorVar(zone.color)} 16%, transparent)`,
+                      color: zoneColorVar(zone.color),
                     }}
                   >
                     <FinanceIcon />

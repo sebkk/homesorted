@@ -170,6 +170,10 @@ export const VAT_RATE = 0.23;
 /** Longest zone name accepted (UI validation and the zone server actions). */
 export const MAX_ZONE_NAME = 50;
 
+/** Zone colors are 1..ZONE_COLORS, indexing the cat1..cat8 palette. */
+export const ZONE_COLORS = 8;
+export const zoneColorVar = (color: number) => `var(--cat${((color - 1) % ZONE_COLORS) + 1})`;
+
 export type AnyIncome = Income | RecurringIncomeOccurrence;
 
 /** Display order of income types; labels live in messages ("incomeTypes"). */

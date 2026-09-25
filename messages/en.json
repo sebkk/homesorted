@@ -289,6 +289,17 @@
     "saving": "Saving…",
     "creating": "Creating…",
     "currencyLocked": "Zone currency: {currency} — it can only be chosen when creating the zone.",
+    "color": "Color",
+    "colors": {
+      "1": "Blue",
+      "2": "Orange",
+      "3": "Teal",
+      "4": "Amber",
+      "5": "Pink",
+      "6": "Green",
+      "7": "Violet",
+      "8": "Red"
+    },
     "renamed": "Renamed to “{name}”",
     "delete": "Delete zone",
     "deleteWarning": "Deleting <b>{name}</b> also deletes all its income, expenses, recurring items, savings and budgets. This can't be undone.",

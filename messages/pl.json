@@ -289,6 +289,17 @@
     "saving": "Zapisywanie…",
     "creating": "Tworzenie…",
     "currencyLocked": "Waluta strefy: {currency} — wybiera się ją tylko przy tworzeniu strefy.",
+    "color": "Kolor",
+    "colors": {
+      "1": "Niebieski",
+      "2": "Pomarańczowy",
+      "3": "Morski",
+      "4": "Bursztynowy",
+      "5": "Różowy",
+      "6": "Zielony",
+      "7": "Fioletowy",
+      "8": "Czerwony"
+    },
     "renamed": "Zmieniono nazwę na „{name}”",
     "delete": "Usuń strefę",
     "deleteWarning": "Usunięcie strefy <b>{name}</b> usunie też wszystkie jej zarobki, wydatki, pozycje stałe, oszczędności i budżety. Tego nie da się cofnąć.",

@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { isSupportedCurrency } from "@/lib/currencies";
-import { MAX_ZONE_NAME } from "@/lib/types";
+import { MAX_ZONE_NAME, ZONE_COLORS } from "@/lib/types";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
@@ -15,22 +15,45 @@ export async function signOut() {
 // Enforced here too: server actions are callable with arbitrary input.
 const validZoneName = (name: string) => name.trim().length > 0 && name.trim().length <= MAX_ZONE_NAME;
 
-export async function createZone(name: string, currency = "PLN") {
+/** A zone's editable settings; the month definition is MonthPeriod in finance.ts. */
+interface ZoneSettings {
+  name: string;
+  color: number;
+  monthStartDay: number;
+  monthLabel: string;
+}
+
+function zoneSettingsError({ name, color, monthStartDay, monthLabel }: ZoneSettings) {
+  if (!validZoneName(name)) return "invalid name";
+  if (!Number.isInteger(color) || color < 1 || color > ZONE_COLORS) return "invalid color";
+  if (!Number.isInteger(monthStartDay) || monthStartDay < 1 || monthStartDay > 28) return "invalid start day";
+  if (monthLabel !== "start" && monthLabel !== "end") return "invalid label";
+  return null;
+}
+
+export async function createZone(fields: ZoneSettings & { currency: string }) {
+  const { name, color, monthStartDay, monthLabel, currency } = fields;
   // Server actions are callable with arbitrary input: only accept known codes.
   if (!isSupportedCurrency(currency)) return { data: null, error: "unsupported currency" };
-  if (!validZoneName(name)) return { data: null, error: "invalid name" };
+  const invalid = zoneSettingsError(fields);
+  if (invalid) return { data: null, error: invalid };
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { count } = await supabase.from("zones").select("*", { count: "exact", head: true }).eq("user_id", user.id);
-  const color = ((count ?? 0) % 8) + 1;
-
   const { data, error } = await supabase
     .from("zones")
-    .insert({ user_id: user.id, name: name.trim() || "Strefa", color, pinned: false, currency })
+    .insert({
+      user_id: user.id,
+      name: name.trim(),
+      color,
+      pinned: false,
+      currency,
+      month_start_day: monthStartDay,
+      month_label: monthLabel,
+    })
     .select()
     .single();
 
@@ -39,17 +62,16 @@ export async function createZone(name: string, currency = "PLN") {
   return { data, error: error?.message ?? null };
 }
 
-/** Saves a zone's name and its month definition (see MonthPeriod in finance.ts). */
-export async function updateZone(zoneId: string, fields: { name: string; monthStartDay: number; monthLabel: string }) {
-  const { name, monthStartDay, monthLabel } = fields;
-  if (!validZoneName(name)) return { error: "invalid name" };
-  if (!Number.isInteger(monthStartDay) || monthStartDay < 1 || monthStartDay > 28) return { error: "invalid start day" };
-  if (monthLabel !== "start" && monthLabel !== "end") return { error: "invalid label" };
+/** Saves a zone's name, color and month definition. The currency is fixed at creation. */
+export async function updateZone(zoneId: string, fields: ZoneSettings) {
+  const invalid = zoneSettingsError(fields);
+  if (invalid) return { error: invalid };
+  const { name, color, monthStartDay, monthLabel } = fields;
   const supabase = await createClient();
   // RLS limits this to the caller's own zones; zero rows means not theirs.
   const { data, error } = await supabase
     .from("zones")
-    .update({ name: name.trim(), month_start_day: monthStartDay, month_label: monthLabel })
+    .update({ name: name.trim(), color, month_start_day: monthStartDay, month_label: monthLabel })
     .eq("id", zoneId)
     .select("id");
   if (!error && !data?.length) return { error: "not found" };

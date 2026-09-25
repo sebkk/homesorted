@@ -65,7 +65,7 @@ export function FinanceView({
         </div>
       </header>
 
-      <main className="flex-1 min-h-0 overflow-y-auto px-5 pt-4" style={{ paddingBottom: "112px" }}>
+      <main className="flex-1 min-h-0 overflow-y-auto px-5 pt-4" style={{ paddingBottom: "calc(112px + env(safe-area-inset-bottom, 0px))" }}>
         {zd.loading ? (
           <FinanceSkeleton tab={tab} />
         ) : tab === "dashboard" ? (
