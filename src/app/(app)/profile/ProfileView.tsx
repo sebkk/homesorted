@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useEncryption } from "@/components/encryption/EncryptionContext";
 import { Banner, FormField, primaryButtonClass } from "@/components/ui/FormField";
 import { InstallSection } from "@/components/ui/InstallApp";
+import { isCaptchaError, useCaptcha } from "@/components/ui/Captcha";
 
 const MIN_PASSWORD = 8;
 
@@ -185,14 +186,19 @@ function AccountPasswordForm({ email }: { email: string }) {
   const t = useTranslations("profile");
   const { form, rules } = usePasswordForm();
   const [result, setResult] = useState<Result>(null);
+  // Checking the current password is a sign-in, which Supabase protects with
+  // the CAPTCHA once it's enabled.
+  const captcha = useCaptcha();
 
   async function onSubmit(values: PasswordValues) {
     setResult(null);
     const supabase = createClient();
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password: values.current });
+    const { error: authError } = await supabase.auth.signInWithPassword({ email, password: values.current, options: captcha.captchaOptions });
+    captcha.reset();
     if (authError) {
       const m = authError.message.toLowerCase();
-      if (m.includes("rate limit") || m.includes("too many")) setResult({ tone: "critical", text: t("errors.rateLimit") });
+      if (isCaptchaError(m)) setResult({ tone: "critical", text: t("errors.captcha") });
+      else if (m.includes("rate limit") || m.includes("too many")) setResult({ tone: "critical", text: t("errors.rateLimit") });
       else form.setError("current", { message: t("errors.wrongCurrent") }, { shouldFocus: true });
       return;
     }
@@ -213,8 +219,9 @@ function AccountPasswordForm({ email }: { email: string }) {
     <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="flex flex-col gap-3">
       <PasswordFields idPrefix="accountPassword" form={form} rules={rules} />
       {result && <Banner tone={result.tone}>{result.text}</Banner>}
-      <button type="submit" disabled={form.formState.isSubmitting} className={primaryButtonClass}>
-        {form.formState.isSubmitting ? t("saving") : t("password.submit")}
+      {captcha.widget}
+      <button type="submit" disabled={form.formState.isSubmitting || !captcha.ready} className={primaryButtonClass}>
+        {form.formState.isSubmitting ? t("saving") : !captcha.ready ? t("verifying") : t("password.submit")}
       </button>
     </form>
   );

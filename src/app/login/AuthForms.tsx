@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 import { LanguageSwitch } from "@/components/ui/LanguageSwitch";
 import { Banner, FormField, primaryButtonClass } from "@/components/ui/FormField";
 import { Logo } from "@/components/ui/Logo";
+import { isCaptchaError, useCaptcha } from "@/components/ui/Captcha";
 
 export type LoginNotice = "confirmed" | "confirmError" | "resetError" | null;
 
@@ -37,6 +38,7 @@ const MIN_PASSWORD = 8;
 /** Supabase auth errors come back in English; map the ones users actually hit. */
 function authErrorKey(message: string): string {
   const m = message.toLowerCase();
+  if (isCaptchaError(m)) return "errors.captcha";
   if (m.includes("invalid login credentials")) return "errors.invalidCredentials";
   if (m.includes("email not confirmed")) return "errors.emailNotConfirmed";
   if (m.includes("rate limit") || m.includes("too many")) return "errors.rateLimit";
@@ -143,6 +145,7 @@ function SignInForm({ defaultEmail, onForgot }: { defaultEmail: string; onForgot
   const router = useRouter();
   const [formError, setFormError] = useState<{ key: string; email?: string } | null>(null);
   const [redirecting, setRedirecting] = useState(false);
+  const captcha = useCaptcha();
   const {
     register,
     handleSubmit,
@@ -154,7 +157,8 @@ function SignInForm({ defaultEmail, onForgot }: { defaultEmail: string; onForgot
     setFormError(null);
     const supabase = createClient();
     const email = values.email.trim();
-    const { error } = await supabase.auth.signInWithPassword({ email, password: values.password });
+    const { error } = await supabase.auth.signInWithPassword({ email, password: values.password, options: captcha.captchaOptions });
+    captcha.reset(); // a token works only once
     if (error) {
       setFormError({ key: authErrorKey(error.message), email });
       return;
@@ -205,8 +209,9 @@ function SignInForm({ defaultEmail, onForgot }: { defaultEmail: string; onForgot
         </Banner>
       )}
 
-      <button type="submit" disabled={busy} className={primaryButtonClass}>
-        {busy ? t("signingIn") : t("signIn")}
+      {captcha.widget}
+      <button type="submit" disabled={busy || !captcha.ready} className={primaryButtonClass}>
+        {busy ? t("signingIn") : !captcha.ready ? t("verifying") : t("signIn")}
       </button>
     </form>
   );
@@ -217,6 +222,7 @@ function SignUpForm({ onDone, onAlreadyRegistered }: { onDone: (email: string) =
   const router = useRouter();
   const [formError, setFormError] = useState<string | null>(null);
   const [redirecting, setRedirecting] = useState(false);
+  const captcha = useCaptcha();
   const {
     register,
     handleSubmit,
@@ -234,8 +240,10 @@ function SignUpForm({ onDone, onAlreadyRegistered }: { onDone: (email: string) =
       options: {
         data: { full_name: values.name.trim() },
         emailRedirectTo: `${window.location.origin}/auth/confirm`,
+        ...captcha.captchaOptions,
       },
     });
+    captcha.reset();
 
     if (error) {
       const key = authErrorKey(error.message);
@@ -326,8 +334,9 @@ function SignUpForm({ onDone, onAlreadyRegistered }: { onDone: (email: string) =
         </Banner>
       )}
 
-      <button type="submit" disabled={busy} className={primaryButtonClass}>
-        {busy ? t("signingUp") : t("signUp")}
+      {captcha.widget}
+      <button type="submit" disabled={busy || !captcha.ready} className={primaryButtonClass}>
+        {busy ? t("signingUp") : !captcha.ready ? t("verifying") : t("signUp")}
       </button>
     </form>
   );
@@ -338,6 +347,7 @@ function SignUpForm({ onDone, onAlreadyRegistered }: { onDone: (email: string) =
 function ForgotPasswordForm({ defaultEmail, onSent }: { defaultEmail: string; onSent: (email: string) => void }) {
   const t = useTranslations("login");
   const [formError, setFormError] = useState<string | null>(null);
+  const captcha = useCaptcha();
   const {
     register,
     handleSubmit,
@@ -349,11 +359,13 @@ function ForgotPasswordForm({ defaultEmail, onSent }: { defaultEmail: string; on
     const email = values.email.trim();
     const { error } = await createClient().auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/auth/reset`,
+      ...captcha.captchaOptions,
     });
+    captcha.reset();
     if (error) {
       const key = authErrorKey(error.message);
       // Any other error would leak whether the address exists; treat as sent.
-      if (key === "errors.rateLimit" || key === "errors.network") {
+      if (key === "errors.rateLimit" || key === "errors.network" || key === "errors.captcha") {
         setFormError(key);
         return;
       }
@@ -376,8 +388,9 @@ function ForgotPasswordForm({ defaultEmail, onSent }: { defaultEmail: string; on
         })}
       />
       {formError && <Banner tone="critical">{t(formError)}</Banner>}
-      <button type="submit" disabled={isSubmitting} className={primaryButtonClass}>
-        {isSubmitting ? t("sending") : t("sendResetLink")}
+      {captcha.widget}
+      <button type="submit" disabled={isSubmitting || !captcha.ready} className={primaryButtonClass}>
+        {isSubmitting ? t("sending") : !captcha.ready ? t("verifying") : t("sendResetLink")}
       </button>
     </form>
   );
@@ -404,7 +417,8 @@ function SignUpDone({ email, onBack }: { email: string; onBack: () => void }) {
 /** Re-sends the sign-up confirmation email, with inline feedback. */
 function ResendLink({ email }: { email: string }) {
   const t = useTranslations("login");
-  const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [state, setState] = useState<"idle" | "sending" | "sent" | "rateLimit" | "captcha">("idle");
+  const captcha = useCaptcha();
 
   async function resend() {
     setState("sending");
@@ -412,19 +426,22 @@ function ResendLink({ email }: { email: string }) {
     const { error } = await supabase.auth.resend({
       type: "signup",
       email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/confirm` },
+      options: { emailRedirectTo: `${window.location.origin}/auth/confirm`, ...captcha.captchaOptions },
     });
-    setState(error ? "error" : "sent");
+    captcha.reset();
+    setState(!error ? "sent" : isCaptchaError(error.message) ? "captcha" : "rateLimit");
   }
 
   if (state === "sent") return <span className="font-semibold text-good"> {t("resendSent")}</span>;
   return (
     <>
       {" "}
-      <button type="button" disabled={state === "sending"} onClick={resend} className="font-semibold text-accent underline disabled:opacity-60">
+      <button type="button" disabled={state === "sending" || !captcha.ready} onClick={resend} className="font-semibold text-accent underline disabled:opacity-60">
         {state === "sending" ? t("resending") : t("resend")}
       </button>
-      {state === "error" && <span className="text-critical"> {t("errors.rateLimit")}</span>}
+      {state === "rateLimit" && <span className="text-critical"> {t("errors.rateLimit")}</span>}
+      {state === "captcha" && <span className="text-critical"> {t("errors.captcha")}</span>}
+      {captcha.widget}
     </>
   );
 }
