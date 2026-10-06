@@ -254,3 +254,121 @@ create policy "user_encryption: owner full access" on public.user_encryption
   for all to authenticated
   using ((select auth.uid()) = user_id)
   with check ((select auth.uid()) = user_id);
+
+-- ---------- zone membership & modules ----------
+-- A zone is a container of modules (finance, pantry) that can be shared with
+-- other household members. The owner (zones.user_id) always has every module;
+-- a member only opens the modules listed in their zone_members row. Finance
+-- tables keep their owner-only policies above, so sharing a zone never exposes
+-- its (possibly encrypted) finances — that waits for a per-zone key.
+alter table public.zones add column if not exists modules text[] not null default '{finance}'
+  check (modules <@ array['finance', 'pantry']::text[] and cardinality(modules) > 0);
+
+create table if not exists public.zone_members (
+  zone_id uuid not null references public.zones(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  role text not null default 'member' check (role in ('owner', 'member')),
+  -- modules a member may open; empty for the owner, who has all of them
+  modules text[] not null default '{pantry}' check (modules <@ array['finance', 'pantry']::text[]),
+  -- per person: everyone pins zones to their own launcher
+  pinned boolean not null default false,
+  created_at timestamptz not null default now(),
+  primary key (zone_id, user_id)
+);
+
+create index if not exists idx_zone_members_user on public.zone_members(user_id);
+create unique index if not exists zone_members_one_owner on public.zone_members(zone_id) where role = 'owner';
+
+-- zones.pinned is superseded by zone_members.pinned; kept only until no
+-- deployed build reads it, then dropped.
+insert into public.zone_members (zone_id, user_id, role, modules, pinned)
+select id, user_id, 'owner', '{}', pinned from public.zones
+on conflict (zone_id, user_id) do nothing;
+
+-- Not exposed through the API (private schema); callable only from policies.
+create schema if not exists private;
+grant usage on schema private to authenticated;
+
+-- security definer: zone_members' own select policy calls this, so it must
+-- read the table without recursing into that policy.
+create or replace function private.is_zone_member(zid uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1 from public.zone_members m
+    where m.zone_id = zid and m.user_id = (select auth.uid())
+  );
+$$;
+
+revoke execute on function private.is_zone_member(uuid) from public, anon;
+grant execute on function private.is_zone_member(uuid) to authenticated;
+
+-- Every new zone gets its owner row, so membership is the single source of
+-- "zones I can see" and of per-person pins.
+create or replace function private.add_zone_owner()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  insert into public.zone_members (zone_id, user_id, role, modules, pinned)
+  values (new.id, new.user_id, 'owner', '{}', new.pinned)
+  on conflict (zone_id, user_id) do nothing;
+  return new;
+end;
+$$;
+
+revoke execute on function private.add_zone_owner() from public, anon, authenticated;
+
+drop trigger if exists zones_add_owner on public.zones;
+create trigger zones_add_owner after insert on public.zones
+  for each row execute function private.add_zone_owner();
+
+-- zones: members can read (name, color, modules); only the owner changes them.
+drop policy if exists "zones: owner full access" on public.zones;
+drop policy if exists "zones: members read" on public.zones;
+drop policy if exists "zones: owner insert" on public.zones;
+drop policy if exists "zones: owner update" on public.zones;
+drop policy if exists "zones: owner delete" on public.zones;
+
+create policy "zones: members read" on public.zones
+  for select to authenticated
+  using ((select auth.uid()) = user_id or private.is_zone_member(id));
+
+create policy "zones: owner insert" on public.zones
+  for insert to authenticated
+  with check ((select auth.uid()) = user_id);
+
+create policy "zones: owner update" on public.zones
+  for update to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+
+create policy "zones: owner delete" on public.zones
+  for delete to authenticated
+  using ((select auth.uid()) = user_id);
+
+-- zone_members: everyone in a zone sees who else is in it; each person can
+-- only flip their own pin. Joining/leaving goes through invite RPCs (pantry
+-- sharing stage); the owner row comes from the trigger above.
+alter table public.zone_members enable row level security;
+
+drop policy if exists "zone_members: members read" on public.zone_members;
+drop policy if exists "zone_members: own pin" on public.zone_members;
+
+create policy "zone_members: members read" on public.zone_members
+  for select to authenticated
+  using ((select auth.uid()) = user_id or private.is_zone_member(zone_id));
+
+create policy "zone_members: own pin" on public.zone_members
+  for update to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+
+revoke insert, update, delete on public.zone_members from anon, authenticated;
+grant update (pinned) on public.zone_members to authenticated;

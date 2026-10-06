@@ -11,7 +11,7 @@ import { startNavigationProgress } from "@/components/ui/NavigationProgress";
 import { createClient } from "@/lib/supabase/client";
 import { createZone, deleteZone, togglePinZone, updateZone } from "@/lib/actions";
 import { currentMonthStr, currentPeriod, nextMonth, type MonthPeriod } from "@/lib/finance";
-import { MAX_ZONE_NAME, ZONE_COLORS, Zone, zoneColorVar } from "@/lib/types";
+import { MAX_ZONE_NAME, ZONE_COLORS, Zone, zoneColorVar, zonesFromMemberships } from "@/lib/types";
 import { Sheet, SheetHeader, Field, fieldAria } from "@/components/ui/Sheet";
 import { Banner } from "@/components/ui/FormField";
 import { useToast } from "@/components/ui/Toast";
@@ -34,15 +34,17 @@ export default function ZonesPage() {
 
   useEffect(() => {
     let cancelled = false;
-    supabase
-      .from("zones")
-      .select("*")
-      .order("created_at", { ascending: true })
-      .then(({ data }) => {
-        if (cancelled) return;
-        setZones((data as Zone[]) ?? []);
-        setLoading(false);
-      });
+    (async () => {
+      // RLS also returns co-members' rows of shared zones; keep only our own.
+      const { data: { session } } = await supabase.auth.getSession();
+      const { data } = await supabase
+        .from("zone_members")
+        .select("pinned, zones(*)")
+        .eq("user_id", session?.user.id ?? "");
+      if (cancelled) return;
+      setZones(zonesFromMemberships(data));
+      setLoading(false);
+    })();
     return () => {
       cancelled = true;
     };

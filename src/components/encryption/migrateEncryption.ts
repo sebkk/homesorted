@@ -21,7 +21,13 @@ export async function migrateAllZonesToEncryption(
   dek: CryptoKey,
   onProgress?: (done: number, total: number) => void
 ): Promise<void> {
-  const { data: zones } = await supabase.from("zones").select("id");
+  // Only zones this user owns: a shared zone's data belongs to its owner and
+  // must never end up encrypted under a member's key.
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) return;
+  const { data: zones } = await supabase.from("zones").select("id").eq("user_id", session.user.id);
   const zoneIds = (zones ?? []).map((z: { id: string }) => z.id);
 
   // Each update re-checks that the row is still plaintext, so a row the user

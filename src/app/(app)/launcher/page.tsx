@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { LanguageSwitch } from "@/components/ui/LanguageSwitch";
 import { EncryptionSetupBanner } from "@/components/encryption/EncryptionSetup";
@@ -6,7 +7,7 @@ import { EncryptionLockButton } from "@/components/encryption/EncryptionLockButt
 import { InstallBanner } from "@/components/ui/InstallApp";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/lib/actions";
-import { Zone, zoneColorVar } from "@/lib/types";
+import { zoneColorVar, zonesFromMemberships } from "@/lib/types";
 
 export async function generateMetadata() {
   return { title: (await getTranslations("titles"))("launcher") };
@@ -19,14 +20,17 @@ export default async function LauncherPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: zones } = await supabase
-    .from("zones")
-    .select("*")
-    .eq("pinned", true)
-    .order("created_at", { ascending: true });
+  if (!user) redirect("/login");
 
-  const pinnedZones = (zones as Zone[] | null) ?? [];
-  const displayName = (user?.user_metadata?.full_name as string | undefined)?.trim() || user?.email || "";
+  // Pins are per person: RLS also returns co-members' rows of shared zones.
+  const { data: pinned } = await supabase
+    .from("zone_members")
+    .select("pinned, zones(*)")
+    .eq("user_id", user.id)
+    .eq("pinned", true);
+
+  const pinnedZones = zonesFromMemberships(pinned);
+  const displayName = (user.user_metadata?.full_name as string | undefined)?.trim() || user.email || "";
 
   return (
     <div className="flex-1 flex flex-col min-h-0">

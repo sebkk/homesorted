@@ -92,9 +92,14 @@ export async function deleteZone(zoneId: string) {
   return { error: error?.message ?? null };
 }
 
+/** Pins are per person (zone_members.pinned), so this never touches anyone else's launcher. */
 export async function togglePinZone(zoneId: string, pinned: boolean) {
   const supabase = await createClient();
-  await supabase.from("zones").update({ pinned }).eq("id", zoneId);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  await supabase.from("zone_members").update({ pinned }).eq("zone_id", zoneId).eq("user_id", user.id);
   revalidatePath("/launcher");
   revalidatePath("/zones");
 }

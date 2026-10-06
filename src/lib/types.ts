@@ -3,15 +3,19 @@
 
 export type IncomeType = "b2b" | "uop" | "uz" | "uod" | "inne";
 
+/** Modules a zone can hold; a shared zone's members open only the ones granted to them. */
+export type ZoneModule = "finance" | "pantry";
+
 export interface Zone {
   id: string;
   user_id: string;
   name: string;
-  pinned: boolean;
+  pinned: boolean; // per person — read from zone_members, not zones
   color: number; // 1-8, indexes into the cat1..cat8 palette
   currency: string; // default currency: every sum in the zone is shown in it
   month_start_day: number; // 1-28; 1 = calendar months (see MonthPeriod)
   month_label: "start" | "end";
+  modules: ZoneModule[]; // modules this zone has
   created_at: string;
 }
 
@@ -173,6 +177,14 @@ export const MAX_ZONE_NAME = 50;
 /** Zone colors are 1..ZONE_COLORS, indexing the cat1..cat8 palette. */
 export const ZONE_COLORS = 8;
 export const zoneColorVar = (color: number) => `var(--cat${((color - 1) % ZONE_COLORS) + 1})`;
+
+/** `zone_members` rows selected as "pinned, zones(*)" → the zones they point
+ * to, carrying that person's own pin, oldest first. */
+export function zonesFromMemberships(rows: unknown): Zone[] {
+  return ((rows ?? []) as { pinned: boolean; zones: Zone }[])
+    .map((m) => ({ ...m.zones, pinned: m.pinned }))
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+}
 
 export type AnyIncome = Income | RecurringIncomeOccurrence;
 
